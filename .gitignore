@@ -6,3 +6,5 @@ saves/
 token.txt
 gh_token.txt
 .env
+# deck 插件的本地缓存，不入库
+.dsh-mattskillsdeck-cache/
