@@ -26,15 +26,20 @@ Minecraft **Forge 1.16.5** 自制模组的构建产物工作区与问题跟踪�
 
 ```
 *.jar                 模组构建产物（随仓库走）
-docs/agents/          deck 插件的工作区声明
-saves/                存档（455MB，不入库）
-jre11-Android.tar.xz  Android 上的 Java 11 运行时（22MB，不入库）
+mods/<modId>/src       Java 源码（从 jar 反编译恢复，见 BUILD.md）
+mods/<modId>/resources mods.toml、语言文件、图标、pack.mcmeta
+build.sh               构建脚本（javac + jar，不依赖 ForgeGradle）
+BUILD.md               依赖、构建命令与当前状态
+docs/agents/           deck 插件的工作区声明
+saves/                 存档（455MB，不入库）
+jre11-Android.tar.xz   Android 上的 Java 11 运行时（22MB，不入库）
 ```
 
 ## 当前缺口
 
-- **源码不在本仓库**：这里只有编译好的 jar，没有 Java 源码与 Gradle 构建脚本。
-- **没有 CI**：jar 由本地手工构建，版本号与产物靠人工对齐。
+- **源码是从 jar 反编译恢复的**：逻辑一致，但最初的注释与写法已经丢失。
+- **本机缺 forge / pixelmon 的 jar**：`build.sh` 在这里还跑不出成品，见 `BUILD.md`。
+- **没有 CI**：jar 靠本地手工构建，版本号与产物靠人工对齐。
 - **许可证不一致**：`monkeymacros` 是 MIT，`pokemonkey` 是 All rights reserved。
 
 ## 安装

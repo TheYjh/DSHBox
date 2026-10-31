@@ -1,0 +1,34 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="All rights reserved"
+[[mods]]
+modId="pokemonkey"
+version="${file.jarVersion}"
+displayName="PokemonKey 努力值/个体值指令"
+authors="PokemonKey"
+credits="基于 Pixelmon Reforged 9.x"
+description='''
+增加两条指令，直接设置玩家队伍中宝可梦的努力值（EV）与个体值（IV）：
+  /pokemonkey  <玩家> <1-6> <属性|all> <0-252>   —— 努力值
+  /pokemonkey2 <玩家> <1-6> <属性|all> <0-31>    —— 个体值
+属性别名：hp=血量、wg=物攻、wf=物防、tg=特攻、tf=特防、speed=速度，all=全部六项。
+需要 OP 权限等级 2。
+'''
+[[dependencies.pokemonkey]]
+    modId="forge"
+    mandatory=true
+    versionRange="[36,)"
+    ordering="NONE"
+    side="BOTH"
+[[dependencies.pokemonkey]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.16.5,1.17)"
+    ordering="NONE"
+    side="BOTH"
+[[dependencies.pokemonkey]]
+    modId="pixelmon"
+    mandatory=true
+    versionRange="[9.1.0,10.0)"
+    ordering="AFTER"
+    side="BOTH"

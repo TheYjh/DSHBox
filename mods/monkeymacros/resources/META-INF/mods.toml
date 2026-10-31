@@ -1,0 +1,40 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="MIT"
+
+[[mods]]
+modId="monkeymacros"
+version="${file.jarVersion}"
+displayName="Monkey Macros"
+authors="Monkey Macros"
+description='''
+A client-side macro mod for Forge 1.16.5.
+
+Configure up to 12 macros in the Configured config screen, bind each macro to a key in
+Options > Controls, and press the key to run that macro's commands in order.
+
+在 Configured 的配置界面中为 12 个宏分别添加指令，再在「选项 > 控制 > 按键绑定」中
+为每个宏设置按键。按下按键后，这个宏里的多条指令会按顺序执行。
+'''
+logoFile="monkeymacros_logo.png"
+
+[[dependencies.monkeymacros]]
+modId="forge"
+mandatory=true
+versionRange="[36,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.monkeymacros]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.16.5,1.17)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.monkeymacros]]
+modId="configured"
+mandatory=false
+versionRange="[1.5,)"
+ordering="NONE"
+side="CLIENT"
