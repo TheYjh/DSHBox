@@ -1,0 +1,6 @@
+# 大文件与本地数据，不入库
+saves/
+*.tar.xz
+token.txt
+gh_token.txt
+*.jar
