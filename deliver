@@ -86,6 +86,8 @@ has_source() { [ -d "$ROOT/mods/$1/src" ]; }
 
 target_name() { printf '[自制-%s-%s]%s-%s.jar' "$1" "$2" "$3" "$4"; }
 
+push_try() { git push -q origin HEAD 2>&1; }
+
 # ---------- 收集输入 ----------
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -259,6 +261,21 @@ git add -A 成品 GLOSSARY.md NAMING.md 2>/dev/null || git add -A 成品
 if git diff --cached --quiet; then
   say ""
   say "成品/ 无变化，不产生提交。"
+  # 但本地可能还有未推送的提交（例如上次 push 失败），这些仍要推上去。
+  if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1 \
+     && [ "$(git rev-list --count '@{u}..HEAD')" -gt 0 ]; then
+    ahead="$(git rev-list --count '@{u}..HEAD')"
+    say "本地有 $ahead 个未推送的提交。"
+    if [ "$PUSH" -eq 0 ]; then say "--no-push：未推送。"; exit 0; fi
+    if push_try || { sleep 2; push_try; } || { sleep 4; push_try; }; then
+      say "已推送：origin $(git rev-parse --abbrev-ref HEAD)"
+      exit 0
+    else
+      say "推送失败（已重试 2 次）。提交仍在本地，未回滚。"
+      say "确认凭据后手动执行：git push"
+      exit 1
+    fi
+  fi
   exit 0
 fi
 
@@ -269,8 +286,6 @@ say ""
 say "已提交：$(git log -1 --oneline)"
 
 [ "$PUSH" -eq 0 ] && { say "--no-push：未推送。"; exit 0; }
-
-push_try() { git push -q origin HEAD 2>&1; }
 
 if push_try || { sleep 2; push_try; } || { sleep 4; push_try; }; then
   say "已推送：origin $(git rev-parse --abbrev-ref HEAD)"
