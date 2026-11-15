@@ -1,0 +1,47 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="MIT"
+
+[[mods]]
+modId="ipnbackpacksort"
+version="${file.jarVersion}"
+displayName="IPN Sophisticated Backpacks Sort Compatibility"
+authors="DSHBox"
+description='''
+Compatibility addon for Inventory Profiles Next and Sophisticated Backpacks on Forge 1.16.5.
+On a Sophisticated Backpacks screen, IPN's normal sort button and hotkey are replaced with a
+server-side sorter that respects Stack Upgrade limits, including stacks larger than 64.
+All other containers keep Inventory Profiles Next's original sorting behavior.
+
+Inventory Profiles Next 与精妙背包的兼容附属：在精妙背包界面按 IPN 原本的整理按钮或热键时，
+改由服务端按精妙背包真实堆叠上限整理（包括大于 64 的堆叠）；其它容器仍使用 IPN 原本逻辑。
+'''
+displayTest="IGNORE_SERVER_VERSION"
+
+[[dependencies.ipnbackpacksort]]
+    modId="forge"
+    mandatory=true
+    versionRange="[36,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.ipnbackpacksort]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.16.5,1.17)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.ipnbackpacksort]]
+    modId="inventoryprofilesnext"
+    mandatory=false
+    versionRange="[1.10,)"
+    ordering="AFTER"
+    side="CLIENT"
+
+[[dependencies.ipnbackpacksort]]
+    modId="sophisticatedbackpacks"
+    mandatory=false
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="BOTH"

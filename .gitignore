@@ -8,3 +8,6 @@ gh_token.txt
 .env
 # deck 插件的本地缓存，不入库
 .dsh-mattskillsdeck-cache/
+
+# 成品/ 是发布目录，正文入库；但 APK 体积大且由 Q17c 决定不入库
+成品/应用/*.apk

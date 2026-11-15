@@ -1,0 +1,33 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="MIT"
+
+[[mods]]
+modId="commandkeys"
+# build.sh 把版本号写进 jar 清单，Forge 从这里取
+version="${file.jarVersion}"
+displayName="Command Keys"
+artifactName="[自建-工具-指令按键]commandkeys"
+authors="CommandKeys"
+description='''
+Bind keys to commands. Press the key, the server runs the command with permission level 4,
+so it works with cheats disabled and without being an OP. Edit the commands in
+config/commandkeys-common.toml (or with a config menu mod such as Configured).
+'''
+
+# 执行发生在服务端：服务端没装这个模组，按键不会有任何效果，所以默认要求两端都有。
+displayTest="MATCH_VERSION"
+
+[[dependencies.commandkeys]]
+    modId="forge"
+    mandatory=true
+    versionRange="[36,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.commandkeys]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.16.5]"
+    ordering="NONE"
+    side="BOTH"

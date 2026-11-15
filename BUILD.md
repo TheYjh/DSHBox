@@ -27,6 +27,14 @@ bash build.sh pokemonkey
 
 产物落在 `dist/<modId>-<版本>.jar`，版本号由 `MOD_VERSION` 决定（默认 `0.0.0-dev`）。
 
+构建**不负责**最终文件名：`dist/` 里是无前缀的原始 jar，交付时才由 `./deliver` 按 `NAMING.md` 改名归档进 `成品/模组/`。所以改标题前缀**不要**动 `build.sh`。
+
+```bash
+bash build.sh monkeymacros   # 产出 dist/monkeymacros-<版本>.jar
+./deliver --check            # 看它会归档成什么名字
+./deliver                    # 归档 + 提交 + 推送
+```
+
 注意 `mods.toml` 里写的是 `version="${file.jarVersion}"`：这个占位符由 Forge 从 jar 清单的 `Implementation-Version` 读取，所以版本号必须在打包时写进 MANIFEST（`build.sh` 已经处理）。
 
 ## 当前状态（重要）

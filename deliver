@@ -1,0 +1,282 @@
+#!/usr/bin/env bash
+# ./deliver — 把构建产物归档进 成品/，提交并推送。
+#
+#   ./deliver                归档 dist/*.jar（或给定的 jar），再 commit + push
+#   ./deliver --check        只报告：会归档什么、会删什么，不改任何东西
+#   ./deliver --prune        归档后真删「有源码且被新版取代」的旧产物
+#   ./deliver --no-push      归档 + commit，但不 push
+#   ./deliver --copy-only    只做归档与额外复制，不碰 git
+#
+# 纪律（见 GLOSSARY.md 与 docs/adr/0001）：
+#   - 删除只对「有源码且被新版取代」的旧产物生效；无源码产物永不自动删。
+#   - 判定「有没有变化」看内容 sha256 + 目标文件名两键，不看 git 的重命名检测。
+#   - 历史只前滚：只用 git rm，永不 force push、永不重写历史。
+#   - push 失败重试两次，仍失败则保留本地 commit 并提示手动 push，绝不回滚。
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ARTIFACT_DIR="$ROOT/成品"
+MOD_DIR="$ARTIFACT_DIR/模组"
+DOC_DIR="$ARTIFACT_DIR/文档"
+NAMING="$ROOT/NAMING.md"
+
+PRUNE=0
+CHECK=0
+PUSH=1
+COPY_ONLY=0
+INPUTS=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --prune)     PRUNE=1 ;;
+    --check)     CHECK=1; PRUNE=0 ;;
+    --no-push)   PUSH=0 ;;
+    --copy-only) COPY_ONLY=1 ;;
+    -h|--help)   sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*)          echo "未知选项：$1" >&2; exit 2 ;;
+    *)           INPUTS+=("$1") ;;
+  esac
+  shift
+done
+
+die() { echo "错误：$*" >&2; exit 1; }
+say() { printf '%s\n' "$*"; }
+
+[ -f "$NAMING" ] || die "缺少 NAMING.md（命名表是文件名唯一权威来源）"
+mkdir -p "$MOD_DIR" "$DOC_DIR"
+
+# ---------- 读取 jar 元数据 ----------
+
+jar_modid() {
+  unzip -p "$1" META-INF/mods.toml 2>/dev/null \
+    | sed -n 's/^[[:space:]]*modId[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+}
+
+jar_version() {
+  local v
+  v="$(unzip -p "$1" META-INF/MANIFEST.MF 2>/dev/null \
+        | sed -n 's/^Implementation-Version:[[:space:]]*\(.*\)$/\1/p' | head -1 | tr -d '\r')"
+  if [ -n "$v" ]; then printf '%s' "$v"; return; fi
+  basename "$1" | sed -n 's/.*-\([0-9][0-9A-Za-z.\-]*\)\.jar$/\1/p'
+}
+
+jar_display() {
+  unzip -p "$1" META-INF/mods.toml 2>/dev/null \
+    | sed -n 's/^[[:space:]]*displayName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+}
+
+jar_license() {
+  unzip -p "$1" META-INF/mods.toml 2>/dev/null \
+    | sed -n 's/^[[:space:]]*license[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+}
+
+# 命名表查询：modId -> "功能域|具体描述"，未登记则返回空
+naming_lookup() {
+  awk -F'|' -v id="$1" '
+    $0 ~ /^\| *`/ {
+      for (i = 2; i <= 4; i++) { gsub(/`/, "", $i); gsub(/^[ \t]+|[ \t]+$/, "", $i) }
+      if ($2 == id) { print $3 "|" $4; exit }
+    }' "$NAMING"
+}
+
+# mods/<modId>/src 存在才算「有源码」——不能用 mods/<modId>/，
+# 因为无源码模组也有 resources/ 目录（见 NAMING.md）。
+has_source() { [ -d "$ROOT/mods/$1/src" ]; }
+
+target_name() { printf '[自制-%s-%s]%s-%s.jar' "$1" "$2" "$3" "$4"; }
+
+# ---------- 收集输入 ----------
+
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+
+if [ ${#INPUTS[@]} -eq 0 ]; then
+  shopt -s nullglob
+  INPUTS=("$ROOT"/dist/*.jar)
+  shopt -u nullglob
+fi
+
+if [ ${#INPUTS[@]} -eq 0 ]; then
+  say "提示：没有新产物（dist/*.jar 为空），本次只刷新清单并提交现有 成品/。"
+  INPUTS=()
+fi
+
+# ---------- 计划 ----------
+
+PLAN="$TMP/plan.tsv"   # 动作 \t 源 \t 目标名 \t modId \t 版本
+: > "$PLAN"
+COUNT_NEW=0; COUNT_SAME=0; COUNT_FAIL=0
+
+for src in "${INPUTS[@]}"; do
+  [ -f "$src" ] || die "找不到：$src"
+  [ -f "$src" ] && unzip -tq "$src" >/dev/null 2>&1 || die "不是合法的 jar：$src"
+
+  modId="$(jar_modid "$src")"
+  [ -n "$modId" ] || die "$(basename "$src")：读不到 modId，无法归档"
+  version="$(jar_version "$src")"
+  [ -n "$version" ] || die "$(basename "$src")：读不到版本号"
+
+  reg="$(naming_lookup "$modId")"
+  [ -n "$reg" ] || die "模组 $modId 未在 NAMING.md 登记，拒绝自行编造前缀。先登记再归档。"
+  domain="${reg%%|*}"; desc="${reg#*|}"
+
+  target="$(target_name "$domain" "$desc" "$modId" "$version")"
+  dest="$MOD_DIR/$target"
+
+  # 两键比对：内容哈希 + 目标文件名
+  if [ -f "$dest" ] && [ "$(sha256sum "$src" | cut -d' ' -f1)" = "$(sha256sum "$dest" | cut -d' ' -f1)" ]; then
+    printf 'same\t%s\t%s\t%s\t%s\n' "$src" "$target" "$modId" "$version" >> "$PLAN"
+    COUNT_SAME=$((COUNT_SAME + 1))
+  else
+    printf 'new\t%s\t%s\t%s\t%s\n' "$src" "$target" "$modId" "$version" >> "$PLAN"
+    COUNT_NEW=$((COUNT_NEW + 1))
+  fi
+done
+
+# ---------- 找出可清理的旧产物（--prune 才执行） ----------
+
+PRUNE_PLAN="$TMP/prune.tsv"
+: > "$PRUNE_PLAN"
+shopt -s nullglob
+for f in "$MOD_DIR"/*.jar; do
+  # modId / 版本从 jar 元数据取，比从文件名猜更稳
+  id="$(jar_modid "$f")"
+  [ -n "$id" ] || continue
+  has_source "$id" || continue          # 无源码 → 不可再生 → 永不自动删
+  cur="$(jar_version "$f")"
+  # 同 modId 的更高版本是否已存在于归档目标
+  while IFS=$'\t' read -r act _ tname tid tver; do
+    [ "$tid" = "$id" ] || continue
+    if [ "$tver" != "$cur" ] && [ "$(printf '%s\n%s\n' "$cur" "$tver" | sort -V | tail -1)" = "$tver" ]; then
+      printf '%s\t%s\t%s\n' "$f" "$cur" "$tver" >> "$PRUNE_PLAN"
+    fi
+  done < "$PLAN"
+done
+shopt -u nullglob
+
+# ---------- 报告 ----------
+
+say "仓库：$ROOT"
+say ""
+say "归档计划（内容哈希 + 文件名两键比对）："
+if [ -s "$PLAN" ]; then
+  while IFS=$'\t' read -r act src tname id ver; do
+    case "$act" in
+      new)  say "  [新增] $(basename "$src")  →  成品/模组/$tname" ;;
+      same) say "  [不变] $tname（内容与文件名均一致）" ;;
+    esac
+  done < "$PLAN"
+else
+  say "  （无）"
+fi
+say "  新增 $COUNT_NEW 个，未变 $COUNT_SAME 个"
+
+if [ -s "$PRUNE_PLAN" ]; then
+  say ""
+  say "可清理的旧产物（有源码、已被新版取代）："
+  while IFS=$'\t' read -r f cur nv; do
+    say "  $(basename "$f")  $cur → $nv"
+  done < "$PRUNE_PLAN"
+  [ "$PRUNE" -eq 1 ] && say "  → 已启用 --prune，将删除上述文件（git rm，历史保留）" \
+                     || say "  → 仅报告，未删除（要删加 --prune）"
+else
+  say ""
+  say "可清理的旧产物：无"
+fi
+
+# 无源码产物永远列出，提醒它们是不可再生资产
+say ""
+say "不可再生资产（无 mods/<modId>/src，永不自动删除）："
+found_orphan=0
+shopt -s nullglob
+for f in "$MOD_DIR"/*.jar; do
+  id="$(jar_modid "$f")"; [ -n "$id" ] || continue
+  if ! has_source "$id"; then
+    say "  [无源码] $(basename "$f")"
+    found_orphan=1
+  fi
+done
+shopt -u nullglob
+[ "$found_orphan" -eq 0 ] && say "  （无）"
+
+if [ "$CHECK" -eq 1 ]; then
+  say ""
+  say "--check：仅报告，未改动任何文件。"
+  exit 0
+fi
+
+# ---------- 执行归档 ----------
+
+while IFS=$'\t' read -r act src tname id ver; do
+  [ "$act" = new ] || continue
+  cp -p "$src" "$MOD_DIR/$tname"
+  say "已归档：成品/模组/$tname"
+done < "$PLAN"
+
+if [ "$PRUNE" -eq 1 ] && [ -s "$PRUNE_PLAN" ]; then
+  while IFS=$'\t' read -r f _ _; do
+    if [ "$COPY_ONLY" -eq 1 ]; then rm -f "$f"; say "已删除：$(basename "$f")"
+    else git -C "$ROOT" rm -q --cached --ignore-unmatch "$f" 2>/dev/null || true; rm -f "$f"; say "已删除（git rm）：$(basename "$f")"; fi
+  done < "$PRUNE_PLAN"
+fi
+
+# ---------- 生成模组清单（派生物，永不撒谎） ----------
+
+{
+  echo "# 模组清单"
+  echo
+  echo "> 本文件由 \`./deliver\` 从 jar 元数据生成，请勿手改。"
+  echo
+  echo "| 文件 | modId | 版本 | 名称 | 许可证 | 源码 |"
+  echo "|---|---|---|---|---|---|"
+  shopt -s nullglob
+  for f in "$MOD_DIR"/*.jar; do
+    id="$(jar_modid "$f")"; ver="$(jar_version "$f")"
+    disp="$(jar_display "$f")"; lic="$(jar_license "$f")"
+    if has_source "$id"; then s="有"; else s="无源码"; fi
+    printf '| `%s` | `%s` | %s | %s | %s | %s |\n' \
+      "$(basename "$f")" "$id" "$ver" "${disp:--}" "${lic:--}" "$s"
+  done
+  shopt -u nullglob
+} > "$DOC_DIR/模组清单.md"
+say "已生成：成品/文档/模组清单.md"
+
+# ---------- 额外复制（旁路，不影响主副本） ----------
+
+if [ -n "${DSHBOX_ARTIFACT_DIR:-}" ]; then
+  mkdir -p "$DSHBOX_ARTIFACT_DIR/模组"
+  cp -p "$MOD_DIR"/*.jar "$DSHBOX_ARTIFACT_DIR/模组/" 2>/dev/null || true
+  say "已额外复制到：$DSHBOX_ARTIFACT_DIR/模组（旁路输出，不影响提交）"
+fi
+
+[ "$COPY_ONLY" -eq 1 ] && { say "--copy-only：未触碰 git。"; exit 0; }
+
+# ---------- 提交与推送 ----------
+
+cd "$ROOT"
+git add -A 成品 GLOSSARY.md NAMING.md 2>/dev/null || git add -A 成品
+
+if git diff --cached --quiet; then
+  say ""
+  say "成品/ 无变化，不产生提交。"
+  exit 0
+fi
+
+ids="$(cut -f4 "$PLAN" | sort -u | paste -sd, -)"
+n="$(git diff --cached --name-only | wc -l | tr -d ' ')"
+git commit -q -m "chore(成品): 归档 ${ids:-(无)} 等 ${n} 个产物"
+say ""
+say "已提交：$(git log -1 --oneline)"
+
+[ "$PUSH" -eq 0 ] && { say "--no-push：未推送。"; exit 0; }
+
+push_try() { git push -q origin HEAD 2>&1; }
+
+if push_try || { sleep 2; push_try; } || { sleep 4; push_try; }; then
+  say "已推送：origin $(git rev-parse --abbrev-ref HEAD)"
+else
+  say ""
+  say "推送失败（已重试 2 次）。本地提交已保留，未回滚。"
+  say "确认网络后手动执行：git push"
+  exit 1
+fi
