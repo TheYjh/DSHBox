@@ -22,7 +22,6 @@
 
 | modId | 功能域 | 具体描述 | 源码 |
 |---|---|---|---|
-| `monkeymacros` | `辅助` | `按键宏` | `mods/monkeymacros/src` |
 | `pokemonkey` | `GOD` | `努力与汗水` | `mods/pokemonkey/src` |
 | `ipnbackpacksort` | `辅助` | `IPN精妙背包整理兼容` | 无 |
 | `ohmygod_greninja` | `GOD` | `我的天呐智娃大人` | 无 |

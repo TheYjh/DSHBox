@@ -19,7 +19,7 @@
 # 脚本在 Android 存储挂载上，chmod +x 不生效，所以用 bash 显式调用
 MC_JAR=/path/client-1.16.5.jar \
 FORGE_JAR=/path/forge-1.16.5-36.2.39-universal.jar \
-bash build.sh monkeymacros
+bash build.sh commandkeys
 
 MC_JAR=... FORGE_JAR=... PIXELMON_JAR=/path/Pixelmon-1.16.5-9.x-universal.jar \
 bash build.sh pokemonkey
@@ -30,7 +30,7 @@ bash build.sh pokemonkey
 构建**不负责**最终文件名：`dist/` 里是无前缀的原始 jar，交付时才由 `./deliver` 按 `NAMING.md` 改名归档进 `成品/模组/`。所以改标题前缀**不要**动 `build.sh`。
 
 ```bash
-bash build.sh monkeymacros   # 产出 dist/monkeymacros-<版本>.jar
+bash build.sh commandkeys   # 产出 dist/commandkeys-<版本>.jar
 ./deliver --check            # 看它会归档成什么名字
 ./deliver                    # 归档 + 提交 + 推送
 ```

@@ -6,11 +6,10 @@ Minecraft **Forge 1.16.5** 自制模组的构建产物工作区与问题跟踪�
 
 ## 模组
 
-5 个模组当前都可分发，最终文件在 `成品/模组/`（文件名由 `NAMING.md` 决定）。其中 3 个没有源码，jar 是唯一实体。
+4 个模组当前都可分发，最终文件在 `成品/模组/`（文件名由 `NAMING.md` 决定）。其中 3 个没有源码，jar 是唯一实体。
 
 | 模组 | modId | 版本 | 功能域 | 许可证 | 源码 |
 |---|---|---|---|---|---|
-| Monkey Macros | `monkeymacros` | 1.0.1 | 辅助 | MIT | 有 |
 | PokemonKey | `pokemonkey` | 1.1.1 | GOD | All rights reserved | 有 |
 | IPN 精妙背包整理兼容 | `ipnbackpacksort` | 1.0.1 | 辅助 | MIT | 无 |
 | 我的天哪忍蛙大人（智娃） | `ohmygod_greninja` | 1.1.0 | GOD | MIT | 无 |
@@ -54,8 +53,8 @@ saves/                 存档（455MB，不入库）
 - **源码是从 jar 反编译恢复的**：逻辑一致，但最初的注释与写法已经丢失。
 - **本机缺 forge / pixelmon 的 jar**：`build.sh` 在这里还跑不出成品，见 `BUILD.md`。
 - **没有 CI**：jar 靠本地手工构建，版本号与产物靠人工对齐。
-- **许可证不一致**：`monkeymacros` 是 MIT，`pokemonkey` 是 All rights reserved。
+- **许可证不一致**：`pokemonkey` 是 All rights reserved，其余模组是 MIT。
 
 ## 安装
 
-把需要的 jar 放进游戏实例的 `mods/` 目录。客户端模组（Monkey Macros）只需装在客户端；PokemonKey 是服务端指令模组，需要装在服务端，客户端若要单人使用也需安装。
+把需要的 jar 放进游戏实例的 `mods/` 目录。客户端模组（Command Keys）只需装在客户端；PokemonKey 是服务端指令模组，需要装在服务端，客户端若要单人使用也需安装。

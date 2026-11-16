@@ -10,11 +10,11 @@
 #   EXTRA_JARS   可选  冒号分隔的其它依赖（如 configured）
 #
 # 用法：
-#   MC_JAR=/path/client-1.16.5.jar FORGE_JAR=/path/forge-universal.jar ./build.sh monkeymacros
+#   MC_JAR=/path/client-1.16.5.jar FORGE_JAR=/path/forge-universal.jar ./build.sh commandkeys
 #   MC_JAR=... FORGE_JAR=... PIXELMON_JAR=... ./build.sh pokemonkey
 set -euo pipefail
 
-MOD="${1:?用法: $0 <monkeymacros|pokemonkey>}"
+MOD="${1:?用法: $0 <commandkeys|pokemonkey>}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_DIR="$ROOT/mods/$MOD/src"
 RES_DIR="$ROOT/mods/$MOD/resources"
