@@ -27,5 +27,6 @@
 | `ipnbackpacksort` | `辅助` | `IPN精妙背包整理兼容` | 无 |
 | `ohmygod_greninja` | `GOD` | `我的天呐智娃大人` | 无 |
 | `commandkeys` | `工具` | `指令按键` | 无 |
+| `bond_greninja` | `GOD` | `羁绊忍蛙与传说技能碟` | `mods/bond_greninja/src` |
 
 新增模组时在这里加一行；`./deliver` 遇到未登记的 modId 会拒绝归档，而不是自己编一个前缀。
