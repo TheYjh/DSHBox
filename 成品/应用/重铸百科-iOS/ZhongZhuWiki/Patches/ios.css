@@ -1,0 +1,309 @@
+/* ==========================================================================
+   重铸百科 iOS 外壳补丁（iOS Shell Override）
+   由内嵌 HTTP 服务在返回 index.html 时追加加载，只影响 iOS 端外观与手感，
+   不改动 web.pack 里的任何原始文件。
+   ========================================================================== */
+
+/* 1. 安全区：刘海 / 灵动岛 / Home 指示条 */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  /* iOS 的 system-ui 就是 SF Pro，中文落到苹方 */
+  --ios-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+              "Helvetica Neue", "Microsoft YaHei", sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background: var(--paper);
+}
+
+body {
+  font-family: var(--ios-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  overscroll-behavior-y: contain;
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/* 内容可复制，但界面元素不选中 */
+a, button, .chip, .mobile-nav, .topbar, .detail-tabs, .btn, .pokemon-card {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.prose, .prose *, .table-wrap, .table-wrap *,
+input, textarea, .detail-hero h1, .entry-row .row-body {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* 2. 顶部栏吃进状态栏高度（viewport-fit=cover 下 env() 才有值） */
+.topbar {
+  height: calc(54px + var(--safe-top));
+  padding-top: var(--safe-top);
+  background: #fbfcf8f5;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #dde5d3;
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+/* 3. 底部导航 + 内容底部留白 */
+.mobile-nav {
+  padding-bottom: max(8px, var(--safe-bottom));
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.mobile-nav a {
+  -webkit-user-select: none;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 10px;
+}
+.mobile-nav a:active {
+  background: #e9efdf;
+}
+main {
+  padding-bottom: calc(80px + var(--safe-bottom));
+  /* 桌面那条 100vh 的兜底在键盘弹起时会顶出空白 */
+  min-height: 0;
+}
+
+/* 4. 触感：可点元素给一点按压缩放，代替悬停反馈 */
+.chip, .btn, .pokemon-card, .entry-row, .guide-card {
+  -webkit-transition: transform .12s ease, background-color .12s ease;
+  transition: transform .12s ease, background-color .12s ease;
+}
+.chip:active, .btn:active {
+  transform: scale(.96);
+}
+.pokemon-card:active, .entry-row:active, .guide-card:active {
+  transform: scale(.985);
+}
+
+/* 5. 输入框：iOS 会放大 <16px 的输入框，这里统一给到 16px 并去掉内阴影 */
+input.search, select {
+  font-family: var(--ios-font);
+  font-size: 16px;
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1.4;
+}
+select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237c8874'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 30px;
+}
+input.search::placeholder {
+  font-family: var(--ios-font);
+}
+
+/* 6. 横向滚动的 tab 条：惯性滚动 + 隐藏滚动条 */
+.detail-tabs, .filters, .table-wrap {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.detail-tabs::-webkit-scrollbar,
+.filters::-webkit-scrollbar,
+.table-wrap::-webkit-scrollbar {
+  display: none;
+}
+.detail-tabs {
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
+  mask-image: linear-gradient(90deg, #000 92%, transparent);
+}
+
+/* 7. 链接禁用 callout 长按菜单，但正文里的外链保留 */
+a[href^="#"], .mobile-nav a, .skip {
+  -webkit-touch-callout: none;
+}
+
+/* 8. 阴影 / 圆角贴合 iOS 观感 */
+.section, .card-grid, .detail-hero, .panel, .hero {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+@media (max-width: 760px) {
+  h1 {
+    /* 29px 在 iOS 上会把「遇见你的下一位伙伴」挤成两行 */
+    font-size: 26px;
+    letter-spacing: -0.2px;
+  }
+  .section-title {
+    font-size: 17px;
+  }
+  #toast {
+    bottom: calc(90px + var(--safe-bottom));
+  }
+  /* 原样式在移动端把圆环阴影关掉了，这里也不动它 */
+  .hero-art:before {
+    box-shadow: none;
+  }
+  .hero {
+    border-radius: 20px;
+  }
+}
+
+/* 9. 原 Android 壳通过 shouldInterceptRequest 注入的移动端修补（逐条对齐 classes.dex）
+   这些规则在 style.css 里没有，缺了会让表格、属性计算器在窄屏挤成一团。 */
+.table-wrap {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+.table-wrap table {
+  width: 100% !important;
+  min-width: 0 !important;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.table-wrap th {
+  white-space: normal;
+  font-size: 11px;
+  line-height: 1.3;
+  padding: 7px 4px;
+}
+.table-wrap td {
+  padding: 7px 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  min-width: 0;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+.table-wrap td * {
+  word-break: normal;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+.table-wrap td .prose {
+  font-size: 12px;
+  line-height: 1.55;
+  min-width: 0 !important;
+}
+.table-wrap img {
+  width: auto;
+  max-width: 28px;
+  max-height: 28px;
+}
+.table-wrap img.structure-img {
+  max-width: 100%;
+  max-height: 90px;
+}
+.table-wrap .icon-label {
+  display: inline-flex;
+  flex-direction: row;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  white-space: normal;
+  max-width: 100%;
+}
+.table-wrap .icon-label img {
+  display: none;
+}
+.table-wrap .type {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.pokemon-moves-table {
+  min-width: 0 !important;
+}
+.pokemon-moves-table th {
+  padding: 7px 4px;
+  font-size: 11px;
+}
+.pokemon-moves-table td {
+  padding: 7px 4px;
+  font-size: 12px;
+}
+.prose {
+  font-size: 13px;
+  line-height: 1.85;
+  word-break: normal;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+.prose p, .prose a {
+  word-break: normal;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+.info-pair b {
+  font-size: 13px;
+}
+.detail-tabs {
+  gap: 16px;
+}
+.detail-tabs a {
+  font-size: 13px;
+}
+.stat-calculator table {
+  min-width: 0 !important;
+}
+.stat-calculator td, .stat-calculator th {
+  padding: 7px 4px;
+  font-size: 12px;
+}
+.stat-calculator input[type=number] {
+  width: 100%;
+  min-width: 0;
+  padding: 4px;
+  font-size: 12px;
+}
+.stat-calculator .calc-inputs input[type=number] {
+  width: 72px;
+}
+.stat-calculator .calc-inputs select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 9b. 同上，窄屏再缩一档（对应 dex 里最后那条 @media） */
+@media (max-width: 760px) {
+  .table-wrap table {
+    font-size: 11.5px;
+  }
+  .table-wrap th {
+    font-size: 11px;
+    padding: 6px 3px;
+  }
+  .table-wrap td {
+    font-size: 11.5px;
+    padding: 6px 3px;
+  }
+  .table-wrap .type {
+    font-size: 9px;
+  }
+  .table-wrap img {
+    max-width: 26px;
+    max-height: 26px;
+  }
+  .pokemon-moves-table th {
+    padding: 6px 3px;
+    font-size: 10px;
+  }
+  .pokemon-moves-table td {
+    padding: 6px 3px;
+    font-size: 11px;
+  }
+  .stat-calculator td, .stat-calculator th {
+    font-size: 11.5px;
+    padding: 6px 3px;
+  }
+}
+

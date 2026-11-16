@@ -1,0 +1,17 @@
+# 网页资源由 script/build_web_assets.py 从原始 APK 还原，449 MB，不入库。
+# 目录本身保留一个占位文件，让 Xcode 工程在任何机器上都能打开。
+ZhongZhuWiki/WebAssets/*
+!ZhongZhuWiki/WebAssets/.gitkeep
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# Xcode 本地产物
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.xcworkspace

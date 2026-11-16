@@ -1,0 +1,283 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A9B47589F1C47027677602E0 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12BE6F43C250EA1C0ABFBF32 /* AppDelegate.swift */; };
+		AD3ECA3D89AC7A3B770F5242 /* WebViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2C5D4BECBA11262D87E6A8 /* WebViewController.swift */; };
+		77BF8A4A841EEEBF6613FB7E /* LocalHTTPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CB1CE64C6CD3233B265061 /* LocalHTTPServer.swift */; };
+		4B55A310D93F889EE3813CD7 /* WebAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E124146E815E71FA800A413 /* WebAssets.swift */; };
+		C2E08E356B0BD6296FAB82C2 /* FailureViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD629C0E2D6FED498012E5E /* FailureViewController.swift */; };
+		222F0DBFFE5EB23DCD3FD16F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6C36FFE920F24CEDB7CFDBFC /* Assets.xcassets */; };
+		90358573B330FCF3ADBF4975 /* WebAssets in Resources */ = {isa = PBXBuildFile; fileRef = BAA648F5EB31E263F02F3931 /* WebAssets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B6CDB6E5D160E013280D3C68 /* ZhongZhuWiki.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZhongZhuWiki.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		12BE6F43C250EA1C0ABFBF32 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		7A2C5D4BECBA11262D87E6A8 /* WebViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewController.swift; sourceTree = "<group>"; };
+		15CB1CE64C6CD3233B265061 /* LocalHTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalHTTPServer.swift; sourceTree = "<group>"; };
+		2E124146E815E71FA800A413 /* WebAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAssets.swift; sourceTree = "<group>"; };
+		4AD629C0E2D6FED498012E5E /* FailureViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FailureViewController.swift; sourceTree = "<group>"; };
+		6C36FFE920F24CEDB7CFDBFC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BAA648F5EB31E263F02F3931 /* WebAssets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = WebAssets; sourceTree = "<group>"; };
+		68E77A9D7BC78A97D4F4E27B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		01031C4076249222DCB5E067 /* ios.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Patches/ios.css; sourceTree = "<group>"; };
+		2AACC3986DDF5DF5694EF8EE /* build_web_assets.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = script/build_web_assets.py; sourceTree = SOURCE_ROOT; };
+		AA4ACA445B3FBAF47CDE31AC /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CF5BDB0BEAFE176F9629192A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		ADCF10F76EBF2A74473E9DC4 = {
+			isa = PBXGroup;
+			children = (
+				6EDB52592B5591ECB26EB2ED /* ZhongZhuWiki */,
+				00C45FD35CB0F9C5F764F070 /* Products */,
+				6E2EFC7262CCDDA2F253F15D /* 工程文件 */,
+			);
+			sourceTree = "<group>";
+		};
+		00C45FD35CB0F9C5F764F070 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B6CDB6E5D160E013280D3C68 /* ZhongZhuWiki.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6E2EFC7262CCDDA2F253F15D /* 工程文件 */ = {
+			isa = PBXGroup;
+			children = (
+				AA4ACA445B3FBAF47CDE31AC /* README.md */,
+				2AACC3986DDF5DF5694EF8EE /* build_web_assets.py */,
+			);
+			name = "工程文件";
+			sourceTree = "<group>";
+		};
+		6EDB52592B5591ECB26EB2ED /* ZhongZhuWiki */ = {
+			isa = PBXGroup;
+			children = (
+				12BE6F43C250EA1C0ABFBF32 /* AppDelegate.swift */,
+				7A2C5D4BECBA11262D87E6A8 /* WebViewController.swift */,
+				15CB1CE64C6CD3233B265061 /* LocalHTTPServer.swift */,
+				2E124146E815E71FA800A413 /* WebAssets.swift */,
+				4AD629C0E2D6FED498012E5E /* FailureViewController.swift */,
+				6C36FFE920F24CEDB7CFDBFC /* Assets.xcassets */,
+				BAA648F5EB31E263F02F3931 /* WebAssets */,
+				68E77A9D7BC78A97D4F4E27B /* Info.plist */,
+				01031C4076249222DCB5E067 /* ios.css */,
+			);
+			path = ZhongZhuWiki;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		29C7B681C8D62CBAC94D51C0 /* ZhongZhuWiki */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D28A2B497FA98060CD1B56AC /* Build configuration list for PBXNativeTarget "ZhongZhuWiki" */;
+			buildPhases = (
+				1CDF2F71A52B082132B04DFF /* Sources */,
+				CF5BDB0BEAFE176F9629192A /* Frameworks */,
+				C02F1309AF4906C92F1EAD44 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ZhongZhuWiki;
+			productName = ZhongZhuWiki;
+			productReference = B6CDB6E5D160E013280D3C68 /* ZhongZhuWiki.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		35FD55BB3686264FAE37A584 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					29C7B681C8D62CBAC94D51C0 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 3D29D9F3A882C4202964FB56 /* Build configuration list for PBXProject "ZhongZhuWiki" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = zh_CN;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				zh_CN,
+				Base,
+			);
+			mainGroup = ADCF10F76EBF2A74473E9DC4;
+			productRefGroup = 00C45FD35CB0F9C5F764F070 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				29C7B681C8D62CBAC94D51C0 /* ZhongZhuWiki */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C02F1309AF4906C92F1EAD44 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				222F0DBFFE5EB23DCD3FD16F /* Assets.xcassets in Resources */,
+				90358573B330FCF3ADBF4975 /* WebAssets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1CDF2F71A52B082132B04DFF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A9B47589F1C47027677602E0 /* AppDelegate.swift in Sources */,
+				AD3ECA3D89AC7A3B770F5242 /* WebViewController.swift in Sources */,
+				77BF8A4A841EEEBF6613FB7E /* LocalHTTPServer.swift in Sources */,
+				4B55A310D93F889EE3813CD7 /* WebAssets.swift in Sources */,
+				C2E08E356B0BD6296FAB82C2 /* FailureViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		E3EBCBBFB33611052F1F254E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		45A51FDE45C8C9313F9CC216 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		9586E89FBE346731A8FAC1E8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "ZhongZhuWiki/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dshbox.zhongzhuwiki;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C08309BB1D0C93C4165F9DF3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "ZhongZhuWiki/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dshbox.zhongzhuwiki;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3D29D9F3A882C4202964FB56 /* Build configuration list for PBXProject "ZhongZhuWiki" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E3EBCBBFB33611052F1F254E /* Debug */,
+				45A51FDE45C8C9313F9CC216 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D28A2B497FA98060CD1B56AC /* Build configuration list for PBXNativeTarget "ZhongZhuWiki" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9586E89FBE346731A8FAC1E8 /* Debug */,
+				C08309BB1D0C93C4165F9DF3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 35FD55BB3686264FAE37A584 /* Project object */;
+}
