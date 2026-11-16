@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.ipnbackpacksort.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "GeneralInventoryActionsMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

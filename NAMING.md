@@ -23,9 +23,9 @@
 | modId | 功能域 | 具体描述 | 源码 |
 |---|---|---|---|
 | `pokemonkey` | `GOD` | `努力与汗水` | `mods/pokemonkey/src` |
-| `ipnbackpacksort` | `辅助` | `IPN精妙背包整理兼容` | 无 |
-| `ohmygod_greninja` | `GOD` | `我的天呐智娃大人` | 无 |
-| `commandkeys` | `工具` | `指令按键` | 无 |
+| `ipnbackpacksort` | `辅助` | `IPN精妙背包整理兼容` | `mods/ipnbackpacksort/src` |
+| `ohmygod_greninja` | `GOD` | `我的天呐智娃大人` | `mods/ohmygod_greninja/src` |
+| `commandkeys` | `工具` | `指令按键` | `mods/commandkeys/src` |
 | `bond_greninja` | `GOD` | `羁绊忍蛙与传说技能碟` | `mods/bond_greninja/src` |
 
 新增模组时在这里加一行；`./deliver` 遇到未登记的 modId 会拒绝归档，而不是自己编一个前缀。
