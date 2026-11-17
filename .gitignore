@@ -15,3 +15,9 @@ gh_token.txt
 # 网页版 UI 修复分发包 ~94MB，与 APK 同理不入库；用
 # 成品/应用/重铸百科网页版-UI修复/apply_ui_fix.py 可从原始资源一键重生成
 成品/应用/重铸百科网页版-*.zip
+
+# 插件工作区/ 是其他工作区的产物接收区，也不该入库；同步源在盘上，目标在 GitHub 插件仓库
+插件工作区/
+
+# deliver-plugin / plugin-watch 的运行日志，不入库
+.plugin-sync.log

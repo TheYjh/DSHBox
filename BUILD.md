@@ -46,7 +46,7 @@ bash build.sh commandkeys   # 产出 dist/commandkeys-<版本>.jar
 
 ## 怎么跑测试
 
-`deliver` 回归测试的入口只有一个：
+`deliver` 与 `deliver-plugin` 回归测试的入口只有一个：
 
 ```bash
 # 跑全部用例
@@ -55,6 +55,9 @@ bash tests/run.sh
 # 只跑名字匹配的用例（glob 作用于 tests/cases/<文件名> 与去掉 .sh 的名字）
 bash tests/run.sh 20-check
 bash tests/run.sh '*check*'
+
+# 只跑插件同步那组
+bash tests/run.sh '7*'
 ```
 
 全部通过时末尾打印 `通过 N，失败 0` 并以 0 退出；任一用例失败则整体非零退出，并打印 `失败用例：...`。想看单个用例的详细输出就直接跑它，比如 `bash tests/cases/21-same-no-commit.sh`。
@@ -81,8 +84,13 @@ bash tests/run.sh '*check*'
 | `60-manifest-refresh` | 清单随交付刷新：交付前预置一份哨兵清单，交付 `demo-1.2.3.jar` 后哨兵被整份重写、表头在位、当次归档的 modId 与目标文件名都能在清单里找到，版本列等于 jar 元数据里的 `Implementation-Version`，且清单与新 jar 在**同一个提交**里 |
 | `60-manifest-coverage` | 清单与 `成品/模组/` 双向一一对应：本次入参只有一个新 jar，目录里另有两个非入参的历史产物——清单每一行都要在目录里找得到文件、目录里每个 `.jar` 都要在清单里有行，两个方向的排序 diff 必须为空（钉死「清单遍历目录生成」，防止退化成只列本次入参） |
 | `60-manifest-no-source` | 源码列按实际状态标注：目录里同时有无 `mods/<id>/src` 的 legacy 与有源码的 demo，交付后前者那行是 `无源码`、后者是 `有`，并逐行比对清单源码列与 `mods/<modId>/src` 的存在性，二者不得漂移 |
+| `70-plugin-sync-archive` | 自研插件整体复制进插件仓库：目录名取**源目录名**而不是 `package.json` 的 `name`，`node_modules`/`.profile-doctor`/`*.log` 不跟着过去，输出 `[新增]`，产生一次提交并真的推到裸仓库 origin，README 表格被重建（含包名与 description **首句**，不含第二句） |
+| `71-plugin-sync-skip-clone` | 自带 `.git` 的第三方克隆被跳过：目标仓库里根本不出现（工作树与 `HEAD` 树都没有），输出有 `[跳过] <目录>：自带 .git（第三方克隆），不自动入库`，提交信息不含它；`--check` 仍报告跳过项且零改动 |
+| `72-plugin-sync-check` | `--check` 只报告：`[新增]`/`[更新]`/`[不变]` 三态同时出现、多余文件进「将删除」清单、README 表格变化被说明；整棵目标仓库哈希指纹、提交数、`HEAD`、远端 ref 前后全等；目标仓库不存在时也不顺手克隆 |
+| `73-plugin-sync-no-empty-commit` | 内容不变的第二次同步：输出全 `[不变]` 并打印「插件仓库无变化，不产生提交。」，提交数/`HEAD`/远端 ref/整树指纹全不变，不再推送，README 也不被重写 |
+| `74-plugin-sync-mirror-delete` | 镜像语义：源里删掉的文件在目标仓库被删（走 `git rm --cached` + `rm -f`，删除进提交），空目录一并收掉，没删的文件一个不少，且旧内容仍能从上一个 commit `git show` 取回 |
 
-用例就这些。它们覆盖的是 `deliver` 的归档、拒绝、清理、提交推送与清单五条主线，**不是**对外行为的全集——下面这些还没有用例：`--no-push`、`--copy-only`、`-h/--help`、`DSHBOX_ARTIFACT_DIR` 的额外复制、显式传入路径（不走 `dist/*.jar`）的成功路径。要动其中任何一处，先补对应用例。
+用例就这些。它们覆盖的是 `deliver` 的归档、拒绝、清理、提交推送与清单五条主线，以及 `deliver-plugin` 的归档、跳过、`--check`、幂等与镜像删除五条主线，**不是**对外行为的全集——下面这些还没有用例：`--no-push`、`--copy-only`、`-h/--help`、`DSHBOX_ARTIFACT_DIR` 的额外复制、显式传入路径（不走 `dist/*.jar`）的成功路径；插件侧的 `--no-push`、`-h/--help`、`DSHBOX_PLUGIN_REPO` 的自动克隆路径（本机 443 不通，只能离线夹具）、`tools/plugin-watch.sh`（除 `--once` 外没有用例锁它的循环行为）。要动其中任何一处，先补对应用例。
 
 另有一条已知的行为缺口（不属本 spec，见 #12 的核对结论）：目标文件名已存在但内容不同时，`deliver` 把它当成新产物直接覆盖，没有冲突中止。当前没有用例锁这个行为，因为它是 #12 待收窄后才会有明确语义的地方。
 

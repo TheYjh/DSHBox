@@ -20,6 +20,8 @@
 
 归档成品的操作手册在 `.agents/skills/deliver/SKILL.md`。
 
+插件（不是模组）发布到另一个仓库 `TheYjh/dsh-plugins`，走 `bash deliver-plugin`，用 `bash tools/plugin-watch.sh` 可挂一个轮询式自动同步。操作手册与失败处置见 `docs/插件入库.md`。
+
 ## 成品目录
 
 `成品/` 是**用户可直接拿走的东西**，按类别分：

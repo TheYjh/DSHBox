@@ -1,0 +1,476 @@
+#!/usr/bin/env bash
+# ./deliver-plugin — 把 插件工作区/ 下的自研插件同步进 GitHub 插件仓库（TheYjh/dsh-plugins）。
+#
+#   bash deliver-plugin                  同步全部自研插件，commit + push
+#   bash deliver-plugin --check          只报告：新增/更新/不变、要删的多余文件、README 表格变不变
+#   bash deliver-plugin --no-push        同步 + commit，但不 push
+#   bash deliver-plugin profile-doctor   只处理点名的插件目录（可给多个）
+#   bash deliver-plugin -h               打印本段注释
+#
+# 行为约定：
+#   - 源目录默认 $ROOT/插件工作区，可用 DSHBOX_PLUGIN_SRC 覆盖；
+#   - 目标仓库默认 /root/share/dsh-plugins，可用 DSHBOX_PLUGIN_REPO 覆盖；
+#     不存在时按 https://github.com/TheYjh/dsh-plugins.git 克隆
+#     （先设 http.version=HTTP/1.1，否则本机 GnuTLS 会失败）；
+#   - 自带 .git 的子目录判定为第三方克隆，跳过并如实报告，不自动入库；
+#   - 先全量校验每个插件的 package.json（name/version），有一条不合格就整批拒绝，
+#     不会「复制了一半」；
+#   - 文件镜像语义：除 .git / node_modules / .profile-doctor / *.log 外全量复制，
+#     目标里多余的已存在文件一律删掉（git rm --cached + rm -f，历史只前滚）；
+#   - 目标仓库 README.md 里 <!-- plugins-table:begin --> 与 <!-- plugins-table:end -->
+#     之间的表体，按各插件 package.json 的 name（去 dsh- 前缀作目录标签）与
+#     description 首句重建；
+#   - 内容无变化时不造空提交，但会补推本地积压的未推送提交；
+#   - push 三次尝试（sleep 2/4）仍失败：保留本地提交、非零退出，绝不回滚。
+#
+# 详细说明见 docs/插件入库.md。
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC="${DSHBOX_PLUGIN_SRC:-$ROOT/插件工作区}"
+REPO="${DSHBOX_PLUGIN_REPO:-/root/share/dsh-plugins}"
+REMOTE="https://github.com/TheYjh/dsh-plugins.git"
+
+TABLE_BEGIN='<!-- plugins-table:begin -->'
+TABLE_END='<!-- plugins-table:end -->'
+
+CHECK=0
+PUSH=1
+WANTED=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check)   CHECK=1 ;;
+    --no-push) PUSH=0 ;;
+    -h|--help) sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*)        echo "未知选项：$1" >&2; exit 2 ;;
+    *)         WANTED+=("$1") ;;
+  esac
+  shift
+done
+
+die() { echo "错误：$*" >&2; exit 1; }
+say() { printf '%s\n' "$*"; }
+
+[ -d "$SRC" ] || die "找不到插件源目录：$SRC（用 DSHBOX_PLUGIN_SRC 指定）"
+
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+
+# ---------- 目标仓库 ----------
+
+ensure_repo() {
+  if [ -d "$REPO/.git" ]; then return 0; fi
+  if [ -e "$REPO" ] && [ -n "$(ls -A "$REPO" 2>/dev/null || true)" ]; then
+    die "目标仓库路径已存在但不是 git 仓库：$REPO（请手工处理后再跑）"
+  fi
+  mkdir -p "$(dirname "$REPO")"
+  say "目标仓库不存在，正在克隆：$REMOTE → $REPO"
+  if ! git -c http.version=HTTP/1.1 clone -q "$REMOTE" "$REPO"; then
+    die "克隆失败：$REMOTE
+请手工执行下面两条命令，然后重跑本脚本：
+  git -c http.version=HTTP/1.1 clone $REMOTE $REPO
+  bash $(basename "${BASH_SOURCE[0]}")"
+  fi
+}
+
+# 本机全局没有 git 身份（容器里只有仓库级配置），克隆出来的仓库直接 commit 会
+# 报 Author identity unknown。这里只补**仓库级**配置，且只补缺的那一项，
+# 绝不覆盖使用者自己设过的名字与邮箱。
+ensure_git_ready() {
+  git -C "$REPO" config user.name  >/dev/null 2>&1 || \
+    git -C "$REPO" config user.name  "${DSHBOX_PLUGIN_GIT_NAME:-TheYjh}"
+  git -C "$REPO" config user.email >/dev/null 2>&1 || \
+    git -C "$REPO" config user.email "${DSHBOX_PLUGIN_GIT_EMAIL:-TheYjh@users.noreply.github.com}"
+  # 本机 git 走 HTTP/2 会报 GnuTLS recv error (-110)，与 GitHub 通信必须降到 1.1。
+  git -C "$REPO" config http.version HTTP/1.1
+  # 凭据助手是仓库级配置，克隆出来的新仓库不会继承 DSHBox 仓库里那条
+  # `!gh auth git-credential`；缺了它 push 会在 HTTPS 上直接报
+  # "could not read Username for 'https://github.com'"。
+  if [ -z "$(git -C "$REPO" config --get-all credential.helper 2>/dev/null)" ]; then
+    git -C "$REPO" config credential.helper '!gh auth git-credential'
+  fi
+}
+
+# --check 绝不创建 / 克隆任何东西；目标仓库还不存在时，按「首次同步」报告：
+# 所有插件都是 [新增]，README 表格留给真正同步的那一次重建。
+REPO_ABSENT=0
+if [ -d "$REPO/.git" ]; then
+  :
+elif [ "$CHECK" -eq 1 ]; then
+  REPO_ABSENT=1
+else
+  ensure_repo
+fi
+
+# --check 且目标仓库尚不存在时没有仓库可配置，跳过。
+[ "$REPO_ABSENT" -eq 1 ] || ensure_git_ready
+
+# ---------- 文件清单与内容指纹 ----------
+
+# 镜像范围：.git / node_modules / .profile-doctor / *.log 之外的全部文件。
+# find 的 -prune 让这些名字在任何层级都生效。
+list_files() {   # $1 目录 → 相对路径（每行一个，C 排序）
+  (
+    cd "$1" || return 1
+    find . -mindepth 1 \
+      \( -name .git -o -name node_modules -o -name .profile-doctor -o -name '*.log' \) -prune \
+      -o -type f -printf '%P\n'
+  ) | LC_ALL=C sort
+}
+
+manifest() {     # $1 目录 → 「相对路径<TAB>sha256」清单（C 排序）
+  local dir="$1" rel
+  list_files "$dir" | while IFS= read -r rel; do
+    printf '%s\t%s\n' "$rel" "$(sha256sum -- "$dir/$rel" | cut -d' ' -f1)"
+  done
+}
+
+# ---------- package.json ----------
+
+# plugin_meta <插件目录>：输出「name<TAB>version<TAB>description 首句」。
+# 只依赖 python3 的标准库 JSON，不引 jq。读不到时返回非零，由调用方 die。
+plugin_meta() {
+  python3 - "$1/package.json" <<'PY'
+import json, re, sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+except FileNotFoundError:
+    sys.exit(3)
+except Exception:
+    sys.exit(4)
+if not isinstance(data, dict):
+    sys.exit(4)
+
+name = data.get("name")
+version = data.get("version")
+if not isinstance(name, str) or not name.strip():
+    sys.exit(5)
+if not isinstance(version, str) or not version.strip():
+    sys.exit(6)
+
+desc = data.get("description")
+if not isinstance(desc, str):
+    desc = ""
+desc = " ".join(desc.split())          # 压掉换行与多余空白，CSV 里不出现竖线以外的坏字符
+
+# 首句：中文句末标点直接截断；英文 . ! ? 只在后面跟空白或结尾时才算句末
+cut = len(desc)
+for ch in "。！？；":
+    i = desc.find(ch)
+    if i != -1:
+        cut = min(cut, i)
+m = re.search(r"[.!?](?=\s|$)", desc)
+if m:
+    cut = min(cut, m.start())
+first = desc[:cut].strip()
+if not first:
+    first = desc.strip()
+
+print("%s\t%s\t%s" % (name.strip(), version.strip(), first.replace("\t", " ")))
+PY
+}
+
+# ---------- 计划（先全量校验，再动手） ----------
+
+PLAN="$TMP/plan.tsv"     # 状态 \t 目录名 \t 包名 \t 版本 \t 描述首句
+DELS="$TMP/dels.tsv"     # 目录名 \t 待删相对路径
+META="$TMP/meta.tsv"     # 目录名 \t 包名 \t 版本 \t 描述首句（全部入库插件，供 README 用）
+: > "$PLAN"; : > "$DELS"; : > "$META"
+
+COUNT_NEW=0; COUNT_UPD=0; COUNT_SAME=0; COUNT_SKIP=0
+SKIP_LINES="$TMP/skip.txt"; : > "$SKIP_LINES"
+
+# 有没有被点名的插件不存在，当场报错（不做部分同步）
+if [ ${#WANTED[@]} -gt 0 ]; then
+  for w in "${WANTED[@]}"; do
+    case "$w" in
+      */*|.*) die "插件目录名不合法：$w" ;;
+    esac
+    [ -d "$SRC/$w" ] || die "源目录里没有这个插件：$w"
+  done
+fi
+
+selected() {   # $1 目录名：是否在处理范围内
+  [ ${#WANTED[@]} -eq 0 ] && return 0
+  local w
+  for w in "${WANTED[@]}"; do [ "$w" = "$1" ] && return 0; done
+  return 1
+}
+
+shopt -s nullglob
+CANDIDATES=()
+for d in "$SRC"/*/; do
+  name="$(basename "$d")"
+  selected "$name" || continue
+  CANDIDATES+=("$name")
+done
+shopt -u nullglob
+
+[ ${#CANDIDATES[@]} -gt 0 ] || die "源目录里没有可同步的插件子目录：$SRC"
+
+# 第一遍：只校验、只算哈希，一个字节都不复制。
+for name in "${CANDIDATES[@]}"; do
+  src_dir="$SRC/$name"
+  if [ -e "$src_dir/.git" ]; then
+    printf '[跳过] %s：自带 .git（第三方克隆），不自动入库\n' "$name" >> "$SKIP_LINES"
+    COUNT_SKIP=$((COUNT_SKIP + 1))
+    continue
+  fi
+
+  if ! meta="$(plugin_meta "$src_dir")"; then
+    die "$name：package.json 缺失、不是合法 JSON，或缺少 name/version —— 整批拒绝，未复制任何文件"
+  fi
+  IFS=$'\t' read -r pkg ver desc <<< "$meta"
+  printf '%s\t%s\t%s\t%s\n' "$name" "$pkg" "$ver" "$desc" >> "$META"
+
+  src_man="$TMP/$name.src"
+  tgt_man="$TMP/$name.tgt"
+  manifest "$src_dir" > "$src_man"
+
+  dst_dir="$REPO/$name"
+  if [ "$REPO_ABSENT" -eq 1 ] || [ ! -d "$dst_dir" ]; then
+    state="new"
+    : > "$tgt_man"
+  else
+    manifest "$dst_dir" > "$tgt_man"
+    if cmp -s "$src_man" "$tgt_man"; then
+      state="same"
+    else
+      state="upd"
+    fi
+  fi
+
+  printf '%s\t%s\t%s\t%s\t%s\n' "$state" "$name" "$pkg" "$ver" "$desc" >> "$PLAN"
+  case "$state" in
+    new)  COUNT_NEW=$((COUNT_NEW + 1)) ;;
+    upd)  COUNT_UPD=$((COUNT_UPD + 1)) ;;
+    same) COUNT_SAME=$((COUNT_SAME + 1)) ;;
+  esac
+
+  # 镜像语义：目标里有、源里没有的已存在文件，全部要删。
+  if [ "$state" != "new" ]; then
+    comm -13 <(cut -f1 "$src_man") <(cut -f1 "$tgt_man") \
+      | while IFS= read -r rel; do
+          [ -n "$rel" ] && printf '%s\t%s\n' "$name" "$rel" >> "$DELS"
+        done
+  fi
+done
+
+# ---------- README 表格 ----------
+#
+# 表格描述的是「插件仓库同步后的样子」，不是「本次点名了哪几个插件」：
+# 只给 deliver-plugin profile-doctor 时，workbuddy-balancer 那一行不能被抹掉。
+# 所以先扫目标仓库里已有的插件目录，再用本次同步的结果覆盖同名行。
+
+README="$REPO/README.md"
+NEW_TABLE="$TMP/table.md"
+OLD_TABLE="$TMP/table.old"
+TABLE_CHANGED=0
+RENDER="$TMP/meta.render"      # 目录名 \t 包名 \t 版本 \t 描述首句
+
+: > "$RENDER"
+if [ "$REPO_ABSENT" -eq 0 ]; then
+  shopt -s nullglob
+  for d in "$REPO"/*/; do
+    name="$(basename "$d")"
+    [ -f "$d/package.json" ] || continue
+    if ! meta="$(plugin_meta "$d")"; then
+      die "目标仓库里 $name/package.json 读不到 name/version，README 表格无法如实生成（请先修好它）"
+    fi
+    printf '%s\t%s\n' "$name" "$meta" >> "$RENDER"
+  done
+  shopt -u nullglob
+fi
+# 本次同步的插件覆盖仓库现状（新增的行也在这里补上）
+while IFS=$'\t' read -r name pkg ver desc; do
+  printf '%s\t%s\t%s\t%s\n' "$name" "$pkg" "$ver" "$desc" >> "$RENDER"
+done < "$META"
+
+if [ -s "$RENDER" ]; then
+  {
+    printf '| 插件 | 包名 | 一句话 |\n'
+    printf '|---|---|---|\n'
+    # 目录名去重：后出现的记录覆盖先出现的（META 在仓库现状之后追加，
+    # 所以本次同步的结果说了算），再去掉标签名做稳定排序输出。
+    awk -F'\t' '{ row[$1] = $0 } END { for (k in row) print row[k] }' "$RENDER" \
+      | LC_ALL=C sort -t $'\t' -k1,1 \
+      | while IFS=$'\t' read -r name pkg ver desc; do
+          label="${pkg#dsh-}"
+          [ -n "$label" ] || label="$name"
+          printf '| [`%s`](./%s/) | `%s` | %s |\n' "$label" "$name" "$pkg" "${desc//|/\\|}"
+        done
+  } > "$NEW_TABLE"
+fi
+
+if [ ! -s "$RENDER" ]; then
+  # 全部被跳过（比如只点名了第三方克隆）：不能把表格清空。
+  say ""
+  say "没有可入库的插件，README 表格保持原样。"
+  TABLE_CHANGED=0
+elif [ "$REPO_ABSENT" -eq 1 ]; then
+  # 仓库还没克隆：--check 无法得知现有 README 长什么样，如实说明。
+  : > "$OLD_TABLE"
+  TABLE_CHANGED=1
+else
+  [ -f "$README" ] || die "目标仓库缺少 README.md：$README"
+  grep -qF "$TABLE_BEGIN" "$README" \
+    || die "README.md 缺少表格起始标记 $TABLE_BEGIN —— 请手工在表格上方补这一行"
+  grep -qF "$TABLE_END" "$README" \
+    || die "README.md 缺少表格结束标记 $TABLE_END —— 请手工在表格下方补这一行"
+
+  python3 - "$README" "$TABLE_BEGIN" "$TABLE_END" > "$OLD_TABLE" <<'PY'
+import sys
+readme, begin, end = sys.argv[1], sys.argv[2], sys.argv[3]
+lines = open(readme, encoding="utf-8").read().split("\n")
+b = next((i for i, l in enumerate(lines) if l.strip() == begin), None)
+if b is None:
+    sys.exit(3)
+e = next((i for i, l in enumerate(lines) if i > b and l.strip() == end), None)
+if e is None:
+    sys.exit(4)
+sys.stdout.write("\n".join(lines[b + 1:e]).strip("\n") + "\n")
+PY
+
+  cmp -s "$OLD_TABLE" "$NEW_TABLE" || TABLE_CHANGED=1
+fi
+
+# ---------- 报告 ----------
+
+say "源目录：$SRC"
+say "插件仓库：$REPO"
+say ""
+say "同步计划（相对路径 + 内容 sha256 比对）："
+
+while IFS= read -r line; do say "  $line"; done < "$SKIP_LINES"
+
+if [ -s "$PLAN" ]; then
+  while IFS=$'\t' read -r state name pkg ver desc; do
+    case "$state" in
+      new)  say "  [新增] $name（包 $pkg $ver）" ;;
+      upd)  say "  [更新] $name（包 $pkg $ver）" ;;
+      same) say "  [不变] $name（包 $pkg $ver，内容一致）" ;;
+    esac
+    awk -F'\t' -v n="$name" '$1 == n { print $2 }' "$DELS" | while IFS= read -r rel; do
+      say "    删除多余文件：$name/$rel"
+    done
+  done < "$PLAN"
+else
+  say "  （无可同步插件）"
+fi
+
+say ""
+if [ "$TABLE_CHANGED" -eq 1 ]; then
+  rows="$(($(wc -l < "$NEW_TABLE") - 2))"
+  say "README 表格：将重建（$rows 个插件）"
+else
+  say "README 表格：无变化"
+fi
+
+say ""
+say "新增 $COUNT_NEW 个，更新 $COUNT_UPD 个，不变 $COUNT_SAME 个，跳过 $COUNT_SKIP 个"
+
+if [ "$CHECK" -eq 1 ]; then
+  say ""
+  say "--check：仅报告，未改动任何文件。"
+  exit 0
+fi
+
+# ---------- 执行同步 ----------
+
+while IFS=$'\t' read -r state name pkg ver desc; do
+  [ "$state" = same ] && continue
+  src_dir="$SRC/$name"
+  dst_dir="$REPO/$name"
+  mkdir -p "$dst_dir"
+  list_files "$src_dir" | while IFS= read -r rel; do
+    mkdir -p "$dst_dir/$(dirname "$rel")"
+    cp -p -- "$src_dir/$rel" "$dst_dir/$rel"
+  done
+  if [ "$state" = new ]; then
+    say "已同步（新增）：$name"
+  else
+    say "已同步（更新）：$name"
+  fi
+done < "$PLAN"
+
+if [ -s "$DELS" ]; then
+  while IFS=$'\t' read -r name rel; do
+    git -C "$REPO" rm -q --cached --ignore-unmatch -- "$name/$rel" 2>/dev/null || true
+    rm -f -- "$REPO/$name/$rel"
+    say "已删除（镜像）：$name/$rel"
+  done < "$DELS"
+  # 删空的目录也顺手收掉，别在仓库里留空壳
+  while IFS=$'\t' read -r name _; do
+    find "$REPO/$name" -mindepth 1 -depth -type d -empty -delete 2>/dev/null || true
+  done < <(cut -f1 "$DELS" | LC_ALL=C sort -u)
+fi
+
+if [ "$TABLE_CHANGED" -eq 1 ]; then
+  python3 - "$README" "$NEW_TABLE" "$TABLE_BEGIN" "$TABLE_END" <<'PY'
+import sys
+readme, table, begin, end = sys.argv[1:5]
+lines = open(readme, encoding="utf-8").read().split("\n")
+b = next(i for i, l in enumerate(lines) if l.strip() == begin)
+e = next(i for i, l in enumerate(lines) if i > b and l.strip() == end)
+body = open(table, encoding="utf-8").read().rstrip("\n").split("\n")
+out = lines[:b + 1] + body + lines[e:]
+open(readme, "w", encoding="utf-8").write("\n".join(out))
+PY
+  say "已重建 README 表格"
+fi
+
+# ---------- 提交与推送 ----------
+
+git -C "$REPO" add -A
+
+if git -C "$REPO" diff --cached --quiet; then
+  say ""
+  say "插件仓库无变化，不产生提交。"
+  # 但本地可能还有未推送的提交（例如上次 push 失败），这些仍要推上去。
+  if git -C "$REPO" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1 \
+     && [ "$(git -C "$REPO" rev-list --count '@{u}..HEAD')" -gt 0 ]; then
+    ahead="$(git -C "$REPO" rev-list --count '@{u}..HEAD')"
+    say "本地有 $ahead 个未推送的提交。"
+    if [ "$PUSH" -eq 0 ]; then say "--no-push：未推送。"; exit 0; fi
+    if git -C "$REPO" push -q origin HEAD 2>/dev/null \
+       || { sleep 2; git -C "$REPO" push -q origin HEAD 2>/dev/null; } \
+       || { sleep 4; git -C "$REPO" push -q origin HEAD 2>/dev/null; }; then
+      say "已推送：origin $(git -C "$REPO" rev-parse --abbrev-ref HEAD)"
+      exit 0
+    fi
+    say ""
+    say "推送失败（已重试 2 次）。本地提交已保留，未回滚。"
+    say "确认网络后手动执行：git -C \"$REPO\" push"
+    exit 1
+  fi
+  exit 0
+fi
+
+# 提交信息里的插件名取自**暂存区里实际改动的顶层目录**，而不是 PLAN 的 new/upd：
+# 上一次跑到一半中断时（例如 commit 前失败），文件已经 staged，这一次 PLAN 会全是
+# same，但暂存区里仍有真实改动 —— 只看 PLAN 会写出「同步 (无)」这种撒谎的消息。
+changed="$(git -C "$REPO" diff --cached --name-only \
+  | awk -F/ '$1 != "README.md" && NF > 1 { print $1 }' \
+  | LC_ALL=C sort -u | paste -sd, -)"
+n="$(git -C "$REPO" diff --cached --name-only | wc -l | tr -d ' ')"
+git -C "$REPO" commit -q -m "chore(插件): 同步 ${changed:-README}"
+say ""
+say "已提交：$(git -C "$REPO" log -1 --oneline)"
+say "（本次改动 $n 个文件）"
+
+if [ "$PUSH" -eq 0 ]; then say "--no-push：未推送。"; exit 0; fi
+
+if git -C "$REPO" push -q origin HEAD 2>/dev/null \
+   || { sleep 2; git -C "$REPO" push -q origin HEAD 2>/dev/null; } \
+   || { sleep 4; git -C "$REPO" push -q origin HEAD 2>/dev/null; }; then
+  say "已推送：origin $(git -C "$REPO" rev-parse --abbrev-ref HEAD)"
+else
+  say ""
+  say "推送失败（已重试 2 次）。本地提交已保留，未回滚。"
+  say "确认网络后手动执行：git -C \"$REPO\" push"
+  exit 1
+fi
