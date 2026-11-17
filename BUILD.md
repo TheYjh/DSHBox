@@ -44,6 +44,40 @@ bash build.sh commandkeys   # 产出 dist/commandkeys-<版本>.jar
 - **本机目前没有 forge 与 pixelmon 的 jar**，所以 `build.sh` 在这里还跑不出成品——需要先从别处拿到这两个依赖。
 - JDK 21 的 `javac` 用 `--release 8` 编译，产物能跑在 1.16.5 需要的 Java 8 上。
 
+## 怎么跑测试
+
+`deliver` 回归测试的入口只有一个：
+
+```bash
+# 跑全部用例
+bash tests/run.sh
+
+# 只跑名字匹配的用例（glob 作用于 tests/cases/<文件名> 与去掉 .sh 的名字）
+bash tests/run.sh 20-check
+bash tests/run.sh '*check*'
+```
+
+全部通过时末尾打印 `通过 4，失败 0` 并以 0 退出；任一用例失败则整体非零退出，并打印 `失败用例：...`。想看单个用例的详细输出就直接跑它，比如 `bash tests/cases/21-same-no-commit.sh`。
+
+### 用例
+
+| 用例 | 锁定的行为 |
+|---|---|
+| `10-archive` | 正常归档：`dist/<id>-<ver>.jar` 落位成 `成品/模组/[自制-<域>-<描述>]<id>-<ver>.jar`，输出含归档提示，产生一次提交 |
+| `20-check` | `--check` 只报告：跑前跑后整棵工作树（排除 `.git`）的哈希指纹完全一致，无提交、无新文件 |
+| `21-same-no-commit` | 内容与目标文件名都相同 → 打印「不产生提交」，`git rev-list --count HEAD` 前后相等 |
+| `22-rename-is-change` | 内容相同但命名表让目标文件名变了 → 仍算变化：新名落位 + 产生新提交，旧名作为无源码资产留在原处 |
+
+后面还有 `30-reject`（拒绝未登记的 modId / 功能域）、`40-prune`（`--prune` 的删除授权）、`50-push`（推送失败路径）、`60-manifest`（模组清单）待补。
+
+### 测试的边界
+
+- **离线**。夹具仓库的 `origin` 是 `git init --bare` 造出来的本地裸仓库，跑测试不需要网络，也不会连真实远端。
+- **不碰真实仓库**。每个 case 在 `mktemp -d` 里自建夹具仓库、把自己的 `git config user.name/user.email` 写进去（本机全局没有，不写就 commit 失败），跑完 `rm -rf`。真实 `成品/`、真实的 git 配置与远端都不在测试范围内。
+- **不依赖预置二进制夹具**。假 jar 由 `make_jar` 用 `zip` 现场蒸：里面只有 `META-INF/MANIFEST.MF`（带 `Implementation-Version`）与 `META-INF/mods.toml`（`modId` 在这里），够 `deliver` 读元数据就行。需要 `zip` 与 `unzip`，`tests/run.sh` 会先检查。
+- **接缝只有命令行**。测试把真实的 `deliver` **复制**进夹具（不是符号链接），然后 `bash ./deliver ...` 调用它，断言输出、退出码与文件系统结果。测试从不 source `deliver` 的内部函数，所以 `deliver` 内部怎么改都不该影响测试——除非对外行为变了，那正是要测的。
+- **期望文件名由夹具的 `NAMING.md` 推导**，测试里不写死前缀常量。
+
 ## 反编译命令（留档）
 
 ```bash
