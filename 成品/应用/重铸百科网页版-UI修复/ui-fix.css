@@ -1,0 +1,85 @@
+/* ==========================================================================
+   重铸百科 · UI 修复补丁（网页版）
+   --------------------------------------------------------------------------
+   来源：重铸百科-1.4.0-UI修复版.apk 的 MainActivity.PATCH_CSS（32 段字符串）。
+   安卓版是 WebView 壳，所有修复都在运行时往每个 .css 末尾追加这段文本；
+   网页版没有壳，所以把它落成一个真实样式文件，在 reading.css 之后引入。
+
+   与原版的唯一差异——生效范围：
+   安卓版的 CSS 宽度被壳固定在 420–720px（viewport 被改写），补丁无条件生效
+   是安全的。网页版要同时在桌面浏览器上打开，无条件生效会把 1400px 宽的桌面
+   表格压成手机版字号。因此这里把「压缩布局」的部分收进 @media(max-width:900px)，
+   只把纯粹的结构性问题（会撑出横向滚动的 min-width、长串不换行）留在全局。
+   桌面端观感与 1.4.0 原版一致，手机上得到与 UI 修复版 App 相同的效果。
+
+   默认引入：<link rel="stylesheet" href="ui-fix.css">（放在 reading.css 之后）
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   一、全局：只修会撑出横向滚动的硬问题，不改任何字号与间距
+   -------------------------------------------------------------------------- */
+
+/* 正文单元格带 min-width:150px，窄列时会把自己撑成竖排 */
+.table-wrap td .prose{min-width:0!important}
+
+/* 长英文/长串在没有断点的位置撑宽表格 */
+.table-wrap td,
+.table-wrap td *,
+.prose,
+.prose p,
+.prose a{word-break:normal;overflow-wrap:break-word;white-space:normal}
+
+/* --------------------------------------------------------------------------
+   二、窄屏（≤900px）：移植 APK 补丁的完整布局压缩
+   900px 是「侧栏 200px + 表格 620px」刚好放不下的临界点
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+
+  /* 表格：网页给招式表写了 min-width:620px、能力值表写了 min-width:510px，
+     窄屏下必然横向溢出；这里只放开这两个硬最小值、收紧字号与内边距。 */
+  .table-wrap{overflow-x:hidden;max-width:100%}
+  .table-wrap table{width:100%!important;min-width:0!important;font-size:12px;line-height:1.5}
+  .pokemon-moves-table{min-width:0!important}
+  .stat-calculator table{min-width:0!important}
+  .table-wrap th{white-space:normal;font-size:11px;line-height:1.3;padding:7px 4px}
+  .table-wrap td{padding:7px 4px;font-size:12px;line-height:1.5;min-width:0;word-break:normal;overflow-wrap:break-word}
+  .table-wrap td .prose{font-size:12px;line-height:1.55;min-width:0!important}
+  .pokemon-moves-table td{padding:7px 4px;font-size:12px}
+  .pokemon-moves-table th{padding:7px 4px;font-size:11px}
+
+  /* 表格里的缩略图原本 70px 宽、高 90px，占掉一整列的宽度 */
+  .table-wrap img{width:auto;max-width:28px;max-height:28px}
+  .table-wrap img.structure-img{max-width:100%;max-height:90px}
+
+  /* 属性/分类图标横排并隐藏图标本身，只留文字标签，省出列宽 */
+  .table-wrap .icon-label{display:inline-flex;flex-direction:row;gap:3px;align-items:center;justify-content:center;white-space:normal;max-width:100%}
+  .table-wrap .icon-label img{display:none}
+  .table-wrap .type{font-size:9.5px;padding:1px 5px;line-height:1.6;white-space:nowrap}
+
+  /* 能力值计算器：输入框原本固定 70px 宽，改成随列宽伸缩 */
+  .stat-calculator td,.stat-calculator th{padding:7px 4px;font-size:12px}
+  .stat-calculator input[type=number]{width:100%;min-width:0;padding:4px;font-size:12px}
+  .stat-calculator .calc-inputs input[type=number]{width:72px}
+  .stat-calculator .calc-inputs select{min-width:0;max-width:100%}
+
+  /* 正文：网页 td .prose 有 min-width:150px，会把自己撑成竖排 */
+  .prose{font-size:13px;line-height:1.85;word-break:normal;overflow-wrap:break-word;white-space:normal}
+  .prose p,.prose a{word-break:normal;overflow-wrap:break-word;white-space:normal}
+  .info-pair b{font-size:13px}
+  .detail-tabs{gap:16px}
+  .detail-tabs a{font-size:13px}
+}
+
+/* --------------------------------------------------------------------------
+   三、手机（≤760px）：APK 补丁内层的再一档收紧，原样保留
+   -------------------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .table-wrap table{font-size:11.5px}
+  .table-wrap th{font-size:11px;padding:6px 3px}
+  .table-wrap td{font-size:11.5px;padding:6px 3px}
+  .pokemon-moves-table td{padding:6px 3px;font-size:11px}
+  .pokemon-moves-table th{padding:6px 3px;font-size:10px}
+  .table-wrap .type{font-size:9px}
+  .table-wrap img{max-width:26px;max-height:26px}
+  .stat-calculator td,.stat-calculator th{font-size:11.5px;padding:6px 3px}
+}
