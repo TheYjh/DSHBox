@@ -175,6 +175,49 @@ fixture_repo() {
   git -C "$REPO" push -q -u origin main || fatal "夹具首次推送失败"
 }
 
+# ---------- 推送相关夹具（#18） ----------
+
+# fixture_commit_offline [message]：在夹具里造一个**只在本地**的提交（默认空提交），
+# 不推送 —— 模拟「上一次 push 失败，提交留在本地」的状态。
+# 用 --allow-empty 是为了不动工作树：后续 deliver 仍应判定「成品/ 无变化」，
+# 这样才测得到「没有新产物、但有未推送提交，仍要把它们推上去」这条语义。
+fixture_commit_offline() {
+  git -C "$REPO" commit -q --allow-empty -m "${1:-fixture: 离线本地提交}" \
+    || fatal "夹具离线提交失败"
+}
+
+# remote_break：把夹具的 origin 指到一个**不存在的本地路径**，让 push 必然失败。
+# 保留 remote 本身（不删 origin —— 删了 deliver 会走「没有上游」的另一条分支），
+# 路径落在沙箱里，全程离线，不碰任何 URL 或域名。
+# 之后用 remote_heal 恢复。
+REMOTE_URL_SAVED=""
+remote_break() {
+  REMOTE_URL_SAVED="$(git -C "$REPO" remote get-url origin)" || fatal "读 origin URL 失败"
+  git -C "$REPO" remote set-url origin "$SANDBOX/nonexistent/never-a-repo.git" \
+    || fatal "把 origin 指向不存在的路径失败"
+}
+
+# remote_heal：把 remote_break 改掉的 origin URL 恢复回夹具裸仓库。
+remote_heal() {
+  [ -n "$REMOTE_URL_SAVED" ] || fatal "remote_heal 之前必须先 remote_break"
+  git -C "$REPO" remote set-url origin "$REMOTE_URL_SAVED" || fatal "恢复 origin URL 失败"
+}
+
+# git_remote_ref <ref>：直接读夹具裸仓库上的 ref（不联网、不用 fetch）。
+# 推送是否真的发生，以裸仓库的 ref 为准，不看脚本自己打印了什么。
+git_remote_ref() {
+  git -C "$ORIGIN" rev-parse --verify -q "$1" 2>/dev/null
+}
+
+# assert_remote_ref <ref> <期望 commit>：裸仓库上的那个 ref 正好指向这个 commit。
+assert_remote_ref() {
+  local ref="$1" want="$2" now
+  CHECKED=$((CHECKED + 1))
+  now="$(git_remote_ref "$ref")"
+  [ "$now" = "$want" ] && return 0
+  fail "裸仓库 origin 的 $ref 期望 ${want}，实际 ${now:-（空）}"
+}
+
 # ---------- 假 jar ----------
 
 # make_jar <outpath> <modId> <version> [display] [license]

@@ -74,12 +74,16 @@ bash tests/run.sh '*check*'
 | `41-prune-deletes-with-history` | 同上场景加 `--prune` → 旧 jar 消失、删除进提交，且删除前那个 commit 上 `git cat-file -e` / `git show` 仍能取回原内容 |
 | `42-prune-no-source-never-candidate` | 旧 jar 没有 `mods/<id>/src` → 即使被更高版本取代也不进候选（单独一条断言），加 `--prune` 后文件仍在、内容不变 |
 | `43-prune-baseline-is-inputs` | 比较基准是本次入参不是全目录：本次没给入参的 modId 零候选；没有新产物时零候选，加 `--prune` 也不删 |
+| `50-push-nochange-synced` | 无变化且远端已同步：不提交、不推送——输出里没有「已推送」，裸仓库 `main` 的 ref 前后指向同一个 commit |
+| `50-push-nochange-ahead` | 无变化但本地有未推送提交（夹具里 `commit --allow-empty` 造的离线提交）→ 仍要推：打印「本地有 1 个未推送的提交」且裸仓库 `main` 更新到本地 HEAD，本地不再产生新提交 |
+| `50-push-fail-keeps-commit` | 推送失败（origin 指向不存在的本地路径，不删 origin）：退出码非零、打印「推送失败（已重试 2 次）」与「未回滚」，那个归档提交仍在 `git log` 里，裸仓库 `main` 停在失败前的位置 |
+| `50-push-fail-no-rollback` | 同一失败场景下的工作树单独断言：新归档文件仍在盘上且内容与原 jar 逐字节相同、在 HEAD 的树里、`git status` 干净，事后 `--check` 也不再改动一个字节 |
 
-后面还有 `50-push`（推送失败路径）、`60-manifest`（模组清单）待补。
+后面还有 `60-manifest`（模组清单）待补。
 
 ### 测试的边界
 
-- **离线**。夹具仓库的 `origin` 是 `git init --bare` 造出来的本地裸仓库，跑测试不需要网络，也不会连真实远端。
+- **离线**。夹具仓库的 `origin` 是 `git init --bare` 造出来的本地裸仓库，跑测试不需要网络，也不会连真实远端。推送失败路径也不用网络：把 `origin` 的 URL 改成一个**不存在的本地路径**（`remote_break`，保留 remote 不删），`git push` 会在本地就 `fatal: ... does not appear to be a git repository` 而失败。
 - **不碰真实仓库**。每个 case 在 `mktemp -d` 里自建夹具仓库、把自己的 `git config user.name/user.email` 写进去（本机全局没有，不写就 commit 失败），跑完 `rm -rf`。真实 `成品/`、真实的 git 配置与远端都不在测试范围内。
 - **不依赖预置二进制夹具**。假 jar 由 `make_jar` 用 `zip` 现场蒸：里面只有 `META-INF/MANIFEST.MF`（带 `Implementation-Version`）与 `META-INF/mods.toml`（`modId` 在这里），够 `deliver` 读元数据就行。需要 `zip` 与 `unzip`，`tests/run.sh` 会先检查。
 - **接缝只有命令行**。测试把真实的 `deliver` **复制**进夹具（不是符号链接），然后 `bash ./deliver ...` 调用它，断言输出、退出码与文件系统结果。测试从不 source `deliver` 的内部函数，所以 `deliver` 内部怎么改都不该影响测试——除非对外行为变了，那正是要测的。
