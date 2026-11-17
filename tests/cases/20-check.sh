@@ -48,8 +48,9 @@ BEFORE_COMMITS="$(git_count_commits)"
 
 deliver_run --check
 assert_rc 0
-assert_contains "[新增] demo-1.2.3.jar"
+assert_contains "[冲突] demo-1.2.3.jar"
 assert_not_contains "已归档："
+assert_not_contains "已覆盖（--overwrite）："
 assert_tree_unchanged
 assert_head_unchanged "$BEFORE_COMMITS"
 assert_git_clean

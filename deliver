@@ -4,12 +4,15 @@
 #   ./deliver                归档 dist/*.jar（或给定的 jar），再 commit + push
 #   ./deliver --check        只报告：会归档什么、会删什么，不改任何东西
 #   ./deliver --prune        归档后真删「有源码且被新版取代」的旧产物
+#   ./deliver --overwrite    允许覆盖「目标已存在但内容不同」的产物（默认整批中止）
 #   ./deliver --no-push      归档 + commit，但不 push
 #   ./deliver --copy-only    只做归档与额外复制，不碰 git
 #
 # 纪律（见 GLOSSARY.md 与 docs/adr/0001）：
 #   - 删除只对「有源码且被新版取代」的旧产物生效；无源码产物永不自动删。
 #   - 判定「有没有变化」看内容 sha256 + 目标文件名两键，不看 git 的重命名检测。
+#   - 目标已存在且内容不同是「冲突」而不是「新增」：默认整批中止、不改任何文件，
+#     只有显式 --overwrite 才覆盖。--check 下如实报告冲突，但仍以 0 退出（它本来就不写）。
 #   - 历史只前滚：只用 git rm，永不 force push、永不重写历史。
 #   - push 失败重试两次，仍失败则保留本地 commit 并提示手动 push，绝不回滚。
 
@@ -25,15 +28,17 @@ PRUNE=0
 CHECK=0
 PUSH=1
 COPY_ONLY=0
+OVERWRITE=0
 INPUTS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --prune)     PRUNE=1 ;;
     --check)     CHECK=1; PRUNE=0 ;;
+    --overwrite) OVERWRITE=1 ;;
     --no-push)   PUSH=0 ;;
     --copy-only) COPY_ONLY=1 ;;
-    -h|--help)   sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)          echo "未知选项：$1" >&2; exit 2 ;;
     *)           INPUTS+=("$1") ;;
   esac
@@ -118,8 +123,10 @@ fi
 # ---------- 计划 ----------
 
 PLAN="$TMP/plan.tsv"   # 动作 \t 源 \t 目标名 \t modId \t 版本
+CONFLICTS="$TMP/conflicts.tsv"   # 源 \t 目标名 \t 源哈希 \t 目标哈希（仅冲突用）
 : > "$PLAN"
-COUNT_NEW=0; COUNT_SAME=0; COUNT_FAIL=0
+: > "$CONFLICTS"
+COUNT_NEW=0; COUNT_SAME=0; COUNT_CONFLICT=0
 
 for src in "${INPUTS[@]}"; do
   [ -f "$src" ] || die "找不到：$src"
@@ -143,13 +150,22 @@ for src in "${INPUTS[@]}"; do
   target="$(target_name "$domain" "$desc" "$modId" "$version")"
   dest="$MOD_DIR/$target"
 
-  # 两键比对：内容哈希 + 目标文件名
-  if [ -f "$dest" ] && [ "$(sha256sum "$src" | cut -d' ' -f1)" = "$(sha256sum "$dest" | cut -d' ' -f1)" ]; then
-    printf 'same\t%s\t%s\t%s\t%s\n' "$src" "$target" "$modId" "$version" >> "$PLAN"
-    COUNT_SAME=$((COUNT_SAME + 1))
-  else
+  # 三键判定：目标不存在 → 新增；目标存在且内容相同 → 不变；
+  # 目标存在但内容不同 → 冲突（默认整批中止，--overwrite 才覆盖）。
+  if [ ! -f "$dest" ]; then
     printf 'new\t%s\t%s\t%s\t%s\n' "$src" "$target" "$modId" "$version" >> "$PLAN"
     COUNT_NEW=$((COUNT_NEW + 1))
+  else
+    src_hash="$(sha256sum "$src" | cut -d' ' -f1)"
+    dest_hash="$(sha256sum "$dest" | cut -d' ' -f1)"
+    if [ "$src_hash" = "$dest_hash" ]; then
+      printf 'same\t%s\t%s\t%s\t%s\n' "$src" "$target" "$modId" "$version" >> "$PLAN"
+      COUNT_SAME=$((COUNT_SAME + 1))
+    else
+      printf 'conflict\t%s\t%s\t%s\t%s\n' "$src" "$target" "$modId" "$version" >> "$PLAN"
+      printf '%s\t%s\t%s\t%s\n' "$src" "$target" "$src_hash" "$dest_hash" >> "$CONFLICTS"
+      COUNT_CONFLICT=$((COUNT_CONFLICT + 1))
+    fi
   fi
 done
 
@@ -166,6 +182,9 @@ for f in "$MOD_DIR"/*.jar; do
   cur="$(jar_version "$f")"
   # 同 modId 的更高版本是否已存在于归档目标
   while IFS=$'\t' read -r act _ tname tid tver; do
+    # 冲突项在默认路径下根本不会落位（整批中止），所以不能拿它当
+    # 「新版已归档」的依据；带 --overwrite 时它会真的落位，这才算数。
+    if [ "$act" = conflict ] && [ "$OVERWRITE" -eq 0 ]; then continue; fi
     [ "$tid" = "$id" ] || continue
     if [ "$tver" != "$cur" ] && [ "$(printf '%s\n%s\n' "$cur" "$tver" | sort -V | tail -1)" = "$tver" ]; then
       printf '%s\t%s\t%s\n' "$f" "$cur" "$tver" >> "$PRUNE_PLAN"
@@ -182,14 +201,47 @@ say "归档计划（内容哈希 + 文件名两键比对）："
 if [ -s "$PLAN" ]; then
   while IFS=$'\t' read -r act src tname id ver; do
     case "$act" in
-      new)  say "  [新增] $(basename "$src")  →  成品/模组/$tname" ;;
-      same) say "  [不变] $tname（内容与文件名均一致）" ;;
+      new)      say "  [新增] $(basename "$src")  →  成品/模组/$tname" ;;
+      same)     say "  [不变] $tname（内容与文件名均一致）" ;;
+      conflict) say "  [冲突] $(basename "$src")  →  成品/模组/$tname（目标已存在，内容不同）" ;;
     esac
   done < "$PLAN"
 else
   say "  （无）"
 fi
-say "  新增 $COUNT_NEW 个，未变 $COUNT_SAME 个"
+say "  新增 $COUNT_NEW 个，未变 $COUNT_SAME 个，冲突 $COUNT_CONFLICT 个"
+
+if [ "$COUNT_CONFLICT" -gt 0 ]; then
+  say ""
+  say "冲突明细（目标文件名已存在，但内容与本次产物不同）："
+  while IFS=$'\t' read -r src tname src_hash dest_hash; do
+    say "  - $(basename "$src")  →  成品/模组/$tname"
+    say "      目标文件已存在，且内容与本次产物不同（不是同一个字节流）。"
+    say "      本次产物 sha256：$src_hash"
+    say "      现目标文件   sha256：$dest_hash"
+  done < "$CONFLICTS"
+  if [ "$OVERWRITE" -eq 1 ]; then
+    say "  → 已启用 --overwrite：上述目标将被覆盖（旧内容只能从 git 历史取回）。"
+  elif [ "$CHECK" -eq 1 ]; then
+    say "  → --check：仅报告冲突，未改动任何文件（本来也不写）。"
+    say "  → 解决：确认要保留旧内容就改版本号或命名表；确认要替换就加 --overwrite。"
+  else
+    say "  → 默认整批中止：未写入任何文件，成品/ 与工作树保持原样。"
+    say "  → 解决：确认要保留现有目标就改版本号或命名表（让目标名不同）；"
+    say "          确认要用新产物替换旧文件就加 --overwrite。"
+  fi
+
+  # 冲突保护：只要有一个「已存在且内容不同」的目标、又没有 --overwrite，
+  # 就在任何写操作之前整批中止。放在清理报告之前是有意的：整批都不落位时，
+  # 再列出「哪些旧产物会被新版取代」只会误导人。
+  if [ "$OVERWRITE" -eq 0 ] && [ "$CHECK" -eq 0 ]; then
+    say ""
+    say "错误：有 $COUNT_CONFLICT 个目标文件已存在且内容不同，整批中止。"
+    say "      未写入任何文件，成品/ 与工作树保持原样。"
+    say "      确认要用新产物替换旧文件后加 --overwrite 重跑。"
+    exit 1
+  fi
+fi
 
 if [ -s "$PRUNE_PLAN" ]; then
   say ""
@@ -228,9 +280,20 @@ fi
 # ---------- 执行归档 ----------
 
 while IFS=$'\t' read -r act src tname id ver; do
-  [ "$act" = new ] || continue
+  case "$act" in
+    new) ;;
+    conflict)
+      # 只有走到这里才可能是 --overwrite（否则上面已经整批中止）。
+      [ "$OVERWRITE" -eq 1 ] || continue
+      ;;
+    *) continue ;;
+  esac
   cp -p "$src" "$MOD_DIR/$tname"
-  say "已归档：成品/模组/$tname"
+  if [ "$act" = conflict ]; then
+    say "已覆盖（--overwrite）：成品/模组/$tname"
+  else
+    say "已归档：成品/模组/$tname"
+  fi
 done < "$PLAN"
 
 if [ "$PRUNE" -eq 1 ] && [ -s "$PRUNE_PLAN" ]; then
