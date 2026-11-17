@@ -14,6 +14,8 @@
 # 断言：
 #   - 至少有一个模组目录（防止 glob 写错导致空循环冒充通过）
 #   - 每个模组的 modId、登记行、功能域、描述全部齐备
+#   - 反方向：表里的每一行也要对得上版本库（源码列写 mods/<id>/src 就必须真入库；
+#     只在本地盘上的目录不能谎称入库）
 
 CASE_NAME="90-real-naming-coverage"
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/harness.sh"
@@ -99,6 +101,52 @@ for d in "${MOD_DIRS[@]}"; do
   if [ -z "$(registered_desc "$id")" ]; then
     fail "模组 $id 在 NAMING.md 的「具体描述」列为空（拼不出交付文件名）"
   fi
+done
+
+# 反方向：命名表的每一行也必须对得上**版本库里**的事实。
+# 只查「磁盘上的 mods/ → 表里有行」是不够的——磁盘上有、库里没有的目录（未跟踪）
+# 会让表格写下一个在新克隆里并不存在的源码路径。表格是入库文件，要按新克隆的事实写，
+# 所以这里用 git ls-files 判「在不在库里」，而不是 test -d 判「盘上有没有」。
+for id in $(awk '
+  /^## / { sec = ($0 ~ /模组登记/); next }
+  sec && /^\| *`/ {
+    gsub(/`/, "", $0)
+    n = split($0, c, "|")
+    id = c[2]; gsub(/^[ \t]+|[ \t]+$/, "", id)
+    if (id != "") print id
+  }' "$NAMING_REAL"); do
+  src_cell="$(awk -F'|' -v id="$id" '
+    $0 ~ /^\| *`/ {
+      for (i = 2; i <= 5; i++) { gsub(/`/, "", $i); gsub(/^[ \t]+|[ \t]+$/, "", $i) }
+      if ($2 == id) { print $5; exit }
+    }' "$NAMING_REAL")"
+
+  CHECKED=$((CHECKED + 1))
+  if [ -z "$src_cell" ]; then
+    fail "NAMING.md 里 $id 的「源码」列为空（不知道该模组有没有源码）"
+    continue
+  fi
+
+  # 列的取值只有两种：`mods/<id>/src`（声称已入库）或「未入库」。
+  case "$src_cell" in
+    未入库*)
+      # 声称未入库：库里就真不该有它的源码，否则是过时的悲观描述。
+      CHECKED=$((CHECKED + 1))
+      if git -C "$DSHBOX_ROOT" ls-files --error-unmatch "mods/$id/src" >/dev/null 2>&1; then
+        fail "NAMING.md 说 $id 的源码未入库，但 mods/$id/src 已经在版本库里了（描述过期，改成 mods/$id/src）"
+      fi
+      ;;
+    mods/*/src)
+      CHECKED=$((CHECKED + 1))
+      if ! git -C "$DSHBOX_ROOT" ls-files "mods/$id/src" | grep -q .; then
+        fail "NAMING.md 说 $id 的源码在 mods/$id/src，但版本库里没有（磁盘上有也可能只是未跟踪；表是入库文件，得按新克隆写）"
+      fi
+      ;;
+    *)
+      CHECKED=$((CHECKED + 1))
+      fail "NAMING.md 里 $id 的「源码」列是「$src_cell」：只允许 mods/<modId>/src 或「未入库」"
+      ;;
+  esac
 done
 
 harness_done

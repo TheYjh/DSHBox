@@ -26,6 +26,11 @@
 | `ipnbackpacksort` | `辅助` | `IPN精妙背包整理兼容` | `mods/ipnbackpacksort/src` |
 | `ohmygod_greninja` | `GOD` | `我的天呐智娃大人` | `mods/ohmygod_greninja/src` |
 | `commandkeys` | `工具` | `指令按键` | `mods/commandkeys/src` |
-| `bond_greninja` | `GOD` | `羁绊忍蛙与传说技能碟` | `mods/bond_greninja/src` |
+| `bond_greninja` | `GOD` | `羁绊忍蛙与传说技能碟` | 未入库（仅作者盘上） |
 
 新增模组时在这里加一行；`./deliver` 遇到未登记的 modId 会拒绝归档，而不是自己编一个前缀。
+
+「源码」列写的是**这份源码在不在版本库里**，不是作者手上有没有。填 `mods/<modId>/src`
+就必须真的入库；只在本地盘上的写「未入库」。本表是入库文件，所以这一列要按新克隆的事实写——
+写错不会让 `./deliver` 出错（它只读功能域与具体描述两列），但会误导人，也会被
+`tests/cases/90-real-naming-coverage.sh` 用 `git ls-files` 检查出来。

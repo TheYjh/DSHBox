@@ -182,7 +182,7 @@ bash tests/run.sh '7*'
 | `88-apk-out-override` | 显式 `OUT` 优先：是文件路径就直接用、是目录就拼原文件名；与 `DSHBOX_ARTIFACT_DIR` 并存时 `OUT` 赢（外部根下一个文件都不出现），三种情况默认 `成品/应用` 都不被顺手写 |
 | `89-apk-reject-intermediate` | 未签名、`-unaligned`、`-unsigned`、非 `.apk` 四种输入 → 各自退出码 1、输出点名原因、`成品/应用` 连目录都不建、显式 `OUT` 也不产出文件 |
 | `91-apk-filename-preserved` | 原文件名原样保留（中文 + 空格 + 点号 + 连字符逐字符比对），默认与 `OUT=目录` 两路都不改名、不加 `[自制-…]` 前缀 |
-| `90-real-naming-coverage` | 真实仓库的命名登记齐备（跨文件静态检查，不在夹具里）：每个 `mods/<id>` 的 `mods.toml` 声明 `modId` 必须等于目录名，且该 id 在真实 `NAMING.md` 的登记表里有行、功能域在枚举内、具体描述非空 |
+| `90-real-naming-coverage` | 真实仓库的命名登记齐备（跨文件静态检查，不在夹具里）：每个 `mods/<id>` 的 `mods.toml` 声明 `modId` 必须等于目录名，且该 id 在真实 `NAMING.md` 的登记表里有行、功能域在枚举内、具体描述非空；反方向也查——表里每一行的「源码」列必须对得上**版本库**（写 `mods/<id>/src` 就得真被 `git ls-files` 看到，只在本地盘上的写「未入库」） |
 | `92-e2e-three-entries` | 三个入口在**同一个夹具仓库**里串通：`build.sh` 产出中性名 `dist/demo-2.1.0.jar`（dist/ 里没有带前缀的件）→ `deliver --check` 报「新增 1 个」且整树零改动 → `deliver` 归档成带前缀名、与 dist/ 产物逐字节相同、dist/ 原件仍在、一次提交 → 重复跑报「未变」不产生新提交 → 改 `NAMING.md` 描述后新名落位而旧名留在原处（命名权威在 NAMING.md 的行为证据）→ `build-apk.sh` 默认落 `成品/应用/`、`DSHBOX_ARTIFACT_DIR` 换根、`OUT` 优先于它 → APK 既在盘上又没被 `git add`（且确实被 `.gitignore` 挡住），全程结束工作树干净 |
 
 用例就这些（40 个；`92` 是唯一的端到端那条，其余各锁一条行为）。它们覆盖的是 `deliver` 的归档、冲突中止、拒绝、清理、提交推送与清单五条主线，`build.sh` 的产物路径与元数据校验，`build-apk.sh` 的默认落位、`DSHBOX_ARTIFACT_DIR`、`OUT` 覆盖与中间产物拒绝四条主线，以及 `deliver-plugin` 的归档、跳过、`--check`、幂等与镜像删除五条主线，**不是**对外行为的全集——下面这些还没有用例：`--no-push`、`--copy-only`、`-h/--help`、显式传入路径（不走 `dist/*.jar`）的成功路径；`build-apk.sh` 的 `-h/--help`、「目标已存在且内容不同」的中止路径、非 zip 与缺 `AndroidManifest.xml` 两种拒绝；插件侧的 `--no-push`、`-h/--help`、`DSHBOX_PLUGIN_REPO` 的自动克隆路径（本机 443 不通，只能离线夹具）、`tools/plugin-watch.sh`（除 `--once` 外没有用例锁它的循环行为）。要动其中任何一处，先补对应用例。
@@ -195,7 +195,7 @@ bash tests/run.sh '7*'
 - **不碰真实仓库**。每个 case 在 `mktemp -d` 里自建夹具仓库、把自己的 `git config user.name/user.email` 写进去（本机全局没有，不写就 commit 失败），跑完 `rm -rf`。真实 `成品/`、真实的 git 配置与远端都不在测试范围内。
 - **不依赖预置二进制夹具**。假 jar 由 `make_jar` 用 `zip` 现场蒸：里面只有 `META-INF/MANIFEST.MF`（带 `Implementation-Version`）与 `META-INF/mods.toml`（`modId` 在这里），够 `deliver` 读元数据就行。需要 `zip` 与 `unzip`，`tests/run.sh` 会先检查。
 - **接缝只有命令行**。测试把真实的 `deliver` 与 `build.sh` **复制**进夹具（不是符号链接），然后 `bash ./deliver ...` / `bash ./build.sh ...` 调用它们，断言输出、退出码与文件系统结果。测试从不 source 脚本的内部函数，所以内部怎么改都不该影响测试——除非对外行为变了，那正是要测的。
-- **`90-real-naming-coverage` 是唯一读真实仓库的用例**：它只用 `find`/`awk`/`sed` 读 `mods/` 与 `NAMING.md` 的事实，不写、不提交、不在真实仓库里跑 `deliver`。原因是被它检查的东西（命名表漏登一行）在夹具里永远造不出来——漏登不会立刻报错，只会在你真去交付那个模组时才暴露。
+- **`90-real-naming-coverage` 是唯一读真实仓库的用例**：它只用 `find`/`awk`/`sed` 与 `git ls-files` 读 `mods/`、`NAMING.md` 与版本库的事实，不写、不提交、不在真实仓库里跑 `deliver`。原因是被它检查的东西（命名表漏登一行、或登记行与版本库脱节）在夹具里永远造不出来——这类漂移不会立刻报错，只会在你真去交付那个模组时才暴露。它查两个方向：磁盘上的模组目录 → 表里有行；表里的行 → 版本库里真有那份源码（`test -d` 不够，未跟踪目录在盘上也在，所以要 `git ls-files`）。
 - **APK 夹具也是现场蒸的**。`tests/lib/apk-harness.sh` 用 `zip` 造最小 APK：含 `AndroidManifest.xml` + `META-INF/FIXTURE.SF` + `META-INF/FIXTURE.RSA` 就算「已签名」，去掉 `META-INF/` 就是「未签名」（`make_signed_apk` / `make_unsigned_apk`）。它不建 git 仓库——APK 入口不碰 git，用例断言的是落位与拒绝，不是提交。真实 `成品/应用/` 不在测试范围内（脚本被复制进沙箱，`BASH_SOURCE` 定位到的仓库根就是沙箱）。
 - **构建夹具不需要真依赖**。`build.sh` 只把 `MC_JAR` / `FORGE_JAR` 拼进 `javac` 的 classpath，而 `javac` 对 classpath 里不存在的条目并不报错，所以夹具用两个只含占位文件的空 jar 就能离线跑通「编译 → 打包」整条链路。夹具模组的源码刻意不 import 任何 Minecraft/Forge 类（`fixture_build_mod`），测的是构建入口的产物路径与元数据校验，不是「真实模组能否编译」——后者需要 1.16.5 客户端与 forge jar，不属于回归测试。
 - **期望文件名由夹具的 `NAMING.md` 推导**，测试里不写死前缀常量。
