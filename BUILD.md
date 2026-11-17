@@ -37,6 +37,13 @@ bash build.sh commandkeys   # 产出 dist/commandkeys-<版本>.jar
 
 注意 `mods.toml` 里写的是 `version="${file.jarVersion}"`：这个占位符由 Forge 从 jar 清单的 `Implementation-Version` 读取，所以版本号必须在打包时写进 MANIFEST（`build.sh` 已经处理）。
 
+`build.sh` 在编译前会先校验两件事，任一条不成立就直接失败、不产生产物：
+
+- **`modId` 必须与目录名一致**。交付时 `./deliver` 从 jar 元数据读 `modId`、按 `NAMING.md` 查前缀，所以 `mods/<目录名>/resources/META-INF/mods.toml` 里声明的 `modId` 必须等于 `<目录名>`。不一致时构建出的 jar 会被归档到另一个模组名下，前缀和实际内容对不上——拦在构建侧比等到谁改名更早发现。
+- **`mods.toml` 必须存在且读得出 `modId`**。没有它，`deliver` 会拒收这个 jar（读不到 `modId`），等于白构建一次。
+
+依赖变量缺失同样在编译前报错并点名缺哪个（`MC_JAR` / `FORGE_JAR`），不会变成一堆 javac 符号错误。
+
 ## 当前状态（重要）
 
 - `mods/*/src` 里的 Java 是**用 CFR 0.152 从现有 jar 反编译**得到的等价源码，不是最初手写的那份：逻辑一致，注释、变量名的原始写法已经丢失。
@@ -73,6 +80,7 @@ bash tests/run.sh '7*'
 | `30-reject-unregistered` | modId 读得出来但 `NAMING.md` 没登记 → 退出码 1，报「未在 NAMING.md 登记」，`成品/` 整棵树零改动、模组清单不重写、不产生提交 |
 | `31-reject-no-modid` | jar 缺 `modId` → 退出码 1，`成品/` 整棵树零改动、不产生提交；不许拿文件名顶替 modId |
 | `32-reject-no-version` | MANIFEST 无 `Implementation-Version` 且文件名也解析不出版本 → 退出码 1，`成品/` 整棵树零改动、不产生提交 |
+| `33-reject-unknown-domain` | 登记的 modId 写了枚举外的功能域 → 退出码 1，报「功能域未在 NAMING.md 登记」，`成品/` 整棵树零改动、不产生提交 |
 | `40-prune-report-only` | 有源码的旧版被新版取代 → 只进「可清理」报告；不加 `--prune` 时文件仍在、提交里无删除、`--check` 也不动一个字节 |
 | `41-prune-deletes-with-history` | 同上场景加 `--prune` → 旧 jar 消失、删除进提交，且删除前那个 commit 上 `git cat-file -e` / `git show` 仍能取回原内容 |
 | `42-prune-no-source-never-candidate` | 旧 jar 没有 `mods/<id>/src` → 即使被更高版本取代也不进候选（单独一条断言），加 `--prune` 后文件仍在、内容不变 |
@@ -89,8 +97,16 @@ bash tests/run.sh '7*'
 | `72-plugin-sync-check` | `--check` 只报告：`[新增]`/`[更新]`/`[不变]` 三态同时出现、多余文件进「将删除」清单、README 表格变化被说明；整棵目标仓库哈希指纹、提交数、`HEAD`、远端 ref 前后全等；目标仓库不存在时也不顺手克隆 |
 | `73-plugin-sync-no-empty-commit` | 内容不变的第二次同步：输出全 `[不变]` 并打印「插件仓库无变化，不产生提交。」，提交数/`HEAD`/远端 ref/整树指纹全不变，不再推送，README 也不被重写 |
 | `74-plugin-sync-mirror-delete` | 镜像语义：源里删掉的文件在目标仓库被删（走 `git rm --cached` + `rm -f`，删除进提交），空目录一并收掉，没删的文件一个不少，且旧内容仍能从上一个 commit `git show` 取回 |
+| `80-build-dist-neutral` | 构建产物留在 `dist/` 且名字中性：`MOD_VERSION` 决定的 `dist/<id>-<ver>.jar` 落盘、清单里有对应 `Implementation-Version`、`dist/` 里没有带 `[自制-…]` 前缀的文件（前缀属交付环节）、`成品/` 零改动 |
+| `81-build-modid-mismatch` | `mods.toml` 的 `modId` 与目录名不符 → 退出码 1、信息同时点名两个 id 并说明会归档到别的模组名下，`dist/` 不产生任何产物 |
+| `82-build-missing-env` | 缺 `MC_JAR` 或 `FORGE_JAR` → 各自单独断言退出码 1 + 信息点名缺哪个变量，两种情况都不写 `dist/` |
+| `83-build-then-deliver` | 端到端：先构建出 `dist/demo-0.4.0.jar`，再不带参数跑 `deliver` 把它归档成 `成品/模组/[自制-<域>-<描述>]demo-0.4.0.jar`；归档件与 `dist/` 产物逐字节相同（改名而非重打包）、验证 jar 仍在 `dist/`、一次提交且工作树干净 |
+| `84-deliver-artifact-dir-override` | `DSHBOX_ARTIFACT_DIR` 只做旁路复制：仓库内 `成品/模组/` 照常落位并入库，外部目录下出现同名同内容副本，该目录不进版本库、工作树仍干净 |
+| `85-build-missing-modstoml` | 模组缺 `mods.toml`（目录名与依赖都正常）→ 退出码 1、信息点名 `mods.toml`，`dist/` 不产生产物 |
+| `86-build-modid-regex` | 目录名带路径分隔符或以点开头（`../etc`、`.hidden`）→ 退出码 1、信息说清不允许，不会把源码目录拼到仓库外（`src` 路径注入防护） |
+| `90-real-naming-coverage` | 真实仓库的命名登记齐备（跨文件静态检查，不在夹具里）：每个 `mods/<id>` 的 `mods.toml` 声明 `modId` 必须等于目录名，且该 id 在真实 `NAMING.md` 的登记表里有行、功能域在枚举内、具体描述非空 |
 
-用例就这些。它们覆盖的是 `deliver` 的归档、拒绝、清理、提交推送与清单五条主线，以及 `deliver-plugin` 的归档、跳过、`--check`、幂等与镜像删除五条主线，**不是**对外行为的全集——下面这些还没有用例：`--no-push`、`--copy-only`、`-h/--help`、`DSHBOX_ARTIFACT_DIR` 的额外复制、显式传入路径（不走 `dist/*.jar`）的成功路径；插件侧的 `--no-push`、`-h/--help`、`DSHBOX_PLUGIN_REPO` 的自动克隆路径（本机 443 不通，只能离线夹具）、`tools/plugin-watch.sh`（除 `--once` 外没有用例锁它的循环行为）。要动其中任何一处，先补对应用例。
+用例就这些。它们覆盖的是 `deliver` 的归档、拒绝、清理、提交推送与清单五条主线，`build.sh` 的产物路径与元数据校验，以及 `deliver-plugin` 的归档、跳过、`--check`、幂等与镜像删除五条主线，**不是**对外行为的全集——下面这些还没有用例：`--no-push`、`--copy-only`、`-h/--help`、显式传入路径（不走 `dist/*.jar`）的成功路径；插件侧的 `--no-push`、`-h/--help`、`DSHBOX_PLUGIN_REPO` 的自动克隆路径（本机 443 不通，只能离线夹具）、`tools/plugin-watch.sh`（除 `--once` 外没有用例锁它的循环行为）。要动其中任何一处，先补对应用例。
 
 另有一条已知的行为缺口（不属本 spec，见 #12 的核对结论）：目标文件名已存在但内容不同时，`deliver` 把它当成新产物直接覆盖，没有冲突中止。当前没有用例锁这个行为，因为它是 #12 待收窄后才会有明确语义的地方。
 
@@ -99,7 +115,9 @@ bash tests/run.sh '7*'
 - **离线**。夹具仓库的 `origin` 是 `git init --bare` 造出来的本地裸仓库，跑测试不需要网络，也不会连真实远端。推送失败路径也不用网络：把 `origin` 的 URL 改成一个**不存在的本地路径**（`remote_break`，保留 remote 不删），`git push` 会在本地就 `fatal: ... does not appear to be a git repository` 而失败。
 - **不碰真实仓库**。每个 case 在 `mktemp -d` 里自建夹具仓库、把自己的 `git config user.name/user.email` 写进去（本机全局没有，不写就 commit 失败），跑完 `rm -rf`。真实 `成品/`、真实的 git 配置与远端都不在测试范围内。
 - **不依赖预置二进制夹具**。假 jar 由 `make_jar` 用 `zip` 现场蒸：里面只有 `META-INF/MANIFEST.MF`（带 `Implementation-Version`）与 `META-INF/mods.toml`（`modId` 在这里），够 `deliver` 读元数据就行。需要 `zip` 与 `unzip`，`tests/run.sh` 会先检查。
-- **接缝只有命令行**。测试把真实的 `deliver` **复制**进夹具（不是符号链接），然后 `bash ./deliver ...` 调用它，断言输出、退出码与文件系统结果。测试从不 source `deliver` 的内部函数，所以 `deliver` 内部怎么改都不该影响测试——除非对外行为变了，那正是要测的。
+- **接缝只有命令行**。测试把真实的 `deliver` 与 `build.sh` **复制**进夹具（不是符号链接），然后 `bash ./deliver ...` / `bash ./build.sh ...` 调用它们，断言输出、退出码与文件系统结果。测试从不 source 脚本的内部函数，所以内部怎么改都不该影响测试——除非对外行为变了，那正是要测的。
+- **`90-real-naming-coverage` 是唯一读真实仓库的用例**：它只用 `find`/`awk`/`sed` 读 `mods/` 与 `NAMING.md` 的事实，不写、不提交、不在真实仓库里跑 `deliver`。原因是被它检查的东西（命名表漏登一行）在夹具里永远造不出来——漏登不会立刻报错，只会在你真去交付那个模组时才暴露。
+- **构建夹具不需要真依赖**。`build.sh` 只把 `MC_JAR` / `FORGE_JAR` 拼进 `javac` 的 classpath，而 `javac` 对 classpath 里不存在的条目并不报错，所以夹具用两个只含占位文件的空 jar 就能离线跑通「编译 → 打包」整条链路。夹具模组的源码刻意不 import 任何 Minecraft/Forge 类（`fixture_build_mod`），测的是构建入口的产物路径与元数据校验，不是「真实模组能否编译」——后者需要 1.16.5 客户端与 forge jar，不属于回归测试。
 - **期望文件名由夹具的 `NAMING.md` 推导**，测试里不写死前缀常量。
 - **夹具预建成品目录**。真实仓库里 `成品/模组`、`成品/文档` 常存，夹具照此预建，所以 `--check` 的「零改动」断言的是**零文件改动**——`deliver` 开头的 `mkdir -p` 若真的建出空目录，不算在这个断言里。要连目录一起管，得先把这个前提从夹具里去掉。
 - **沙箱固定在 `/tmp`**。`harness_init` 会拒绝在 `/tmp` 之外造夹具（防止误删真实目录），所以 `TMPDIR` 指到别处时全部用例会红，这是设计而不是 bug。

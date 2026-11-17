@@ -7,7 +7,6 @@ modId="ohmygod_greninja"
 # build.sh 把版本号写进 jar 清单，Forge 从这里取
 version="${file.jarVersion}"
 displayName="我的天哪忍蛙大人（智娃）"
-artifactName="[自加-GOD-我的天呐智娃大人]ohmygod_greninja"
 authors="TheYjh"
 description='''
 智娃：小智版甲贺忍蛙的可选增强标记，适配「宝可梦：轻快之旅 v2.4.0」里的回迁核心 1.12.0

@@ -14,7 +14,10 @@
 #   MC_JAR=... FORGE_JAR=... PIXELMON_JAR=... ./build.sh pokemonkey
 set -euo pipefail
 
-MOD="${1:?用法: $0 <commandkeys|pokemonkey>}"
+MOD="${1:?用法: $0 <modId>   （modId 即 mods/ 下的目录名，如 commandkeys）}"
+case "$MOD" in
+  */*|.*) echo "错误：模组标识不能含路径分隔符或以点开头：$MOD" >&2; exit 1 ;;
+esac
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_DIR="$ROOT/mods/$MOD/src"
 RES_DIR="$ROOT/mods/$MOD/resources"
@@ -22,6 +25,20 @@ RES_DIR="$ROOT/mods/$MOD/resources"
 [[ -d "$SRC_DIR" ]] || { echo "没有 $SRC_DIR" >&2; exit 1; }
 : "${MC_JAR:?需要 MC_JAR（1.16.5 客户端 jar）}"
 : "${FORGE_JAR:?需要 FORGE_JAR（forge universal jar）}"
+
+# ---------- 元数据自洽校验 ----------
+# 交付文件名由 ./deliver 按 NAMING.md 施加，而 modId 从 jar 元数据读。
+# 所以「目录名 == mods.toml 的 modId」是构建侧必须守住的不变式：
+# 两者一旦不一致，构建出的 jar 会以另一个 modId 被归档，前缀与实际模组对不上。
+MOD_TOML="$RES_DIR/META-INF/mods.toml"
+[[ -f "$MOD_TOML" ]] || { echo "错误：$MOD 缺少 $MOD_TOML（modId 是归档时读元数据的唯一来源）" >&2; exit 1; }
+TOML_MODID="$(sed -n 's/^[[:space:]]*modId[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$MOD_TOML" | head -1)"
+[[ -n "$TOML_MODID" ]] || { echo "错误：$MOD_TOML 里读不到 modId" >&2; exit 1; }
+[[ "$TOML_MODID" = "$MOD" ]] || {
+  echo "错误：mods/$MOD/resources 的 mods.toml 声明 modId=\"$TOML_MODID\"，与目录名 $MOD 不符。" >&2
+  echo "      交付时会按 jar 里的 modId 归档，名字和目录对不上会归档到别的模组名下。" >&2
+  exit 1
+}
 
 CP="$MC_JAR:$FORGE_JAR"
 for v in "${PIXELMON_JAR:-}" "${EXTRA_JARS:-}"; do

@@ -80,6 +80,18 @@ naming_lookup() {
     }' "$NAMING"
 }
 
+# 功能域闭合枚举：从 NAMING.md 的「功能域」一节读出允许值（表首列）。
+# 枚举写在命名表里而不写在脚本里——新增功能域是改表格，不是改代码。
+naming_domains() {
+  awk '
+    /^## / { sec = ($0 ~ /功能域/); next }
+    sec && /^\| *`/ {
+      line = $0
+      sub(/^\| */, "", line); sub(/ *\|.*/, "", line); gsub(/`/, "", line)
+      if (line != "") print line
+    }' "$NAMING"
+}
+
 # mods/<modId>/src 存在才算「有源码」——不能用 mods/<modId>/，
 # 因为无源码模组也有 resources/ 目录（见 NAMING.md）。
 has_source() { [ -d "$ROOT/mods/$1/src" ]; }
@@ -121,6 +133,12 @@ for src in "${INPUTS[@]}"; do
   reg="$(naming_lookup "$modId")"
   [ -n "$reg" ] || die "模组 $modId 未在 NAMING.md 登记，拒绝自行编造前缀。先登记再归档。"
   domain="${reg%%|*}"; desc="${reg#*|}"
+  [ -n "$domain" ] || die "模组 $modId 在 NAMING.md 的「功能域」列为空，无法拼出交付文件名"
+  [ -n "$desc" ] || die "模组 $modId 在 NAMING.md 的「具体描述」列为空，无法拼出交付文件名"
+  # 功能域是闭合枚举：未登记的功能域会让前缀退化成 [自制-其它-xxx]，这里拦在归档前。
+  if ! naming_domains | grep -qxF -- "$domain"; then
+    die "模组 $modId 的功能域「$domain」未在 NAMING.md 的功能域枚举中登记。先登记该功能域再归档。"
+  fi
 
   target="$(target_name "$domain" "$desc" "$modId" "$version")"
   dest="$MOD_DIR/$target"

@@ -13,6 +13,7 @@ set -uo pipefail
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DSHBOX_ROOT="$(dirname "$TESTS_DIR")"
 REAL_DELIVER="$DSHBOX_ROOT/deliver"
+REAL_BUILD="$DSHBOX_ROOT/build.sh"
 
 CASE_NAME="${CASE_NAME:-$(basename "${BASH_SOURCE[1]:-$0}" .sh)}"
 FAILURES=0
@@ -22,6 +23,7 @@ ORIGIN=""
 OUT=""
 RC=0
 LAST_CMDLINE=""
+DELIVER_ENV=()   # deliver_run 额外注入的环境变量（NAME=value）
 
 # ---------- 输出与失败上下文 ----------
 
@@ -140,6 +142,19 @@ naming_set_desc() {
   mv "$f.new" "$f"
 }
 
+# naming_set_domain <modId> <新功能域>：改夹具命名表的「功能域」列。
+# 用来造「功能域不在闭合枚举里」的坏夹具 —— 枚举本身不许被改写（测试不动功能域那节）。
+naming_set_domain() {
+  local id="$1" domain="$2" f="$REPO/NAMING.md"
+  awk -v id="$id" -v d="$domain" '
+    BEGIN { FS = "|"; OFS = "|" }
+    {
+      if ($0 ~ /^\| *`/ && index($2, "`" id "`") > 0) { $3 = "`" d "`" }
+      print
+    }' "$f" > "$f.new" || return 1
+  mv "$f.new" "$f"
+}
+
 # fixture_repo：在沙箱里造一个能直接跑 deliver 的夹具仓库。
 #   - git init（本地 user.name/user.email：本机全局没有）
 #   - 夹具命名表（默认登记 demo）与真实 deliver 的副本
@@ -241,6 +256,88 @@ make_jar() {
   rm -rf "$stage"
 }
 
+# ---------- 构建夹具（#10） ----------
+#
+# build.sh 不用 ForgeGradle：它只把 MC_JAR / FORGE_JAR 拼进 javac 的 classpath。
+# javac 对 classpath 里不存在的条目并不报错，所以夹具用两个空 jar 就能离线
+# 跑通「编译 → 打包」整条链路，不需要真的 1.16.5 客户端与 forge jar。
+
+# make_empty_jar <outpath>：蒸一个只有占位条目的合法 jar，当 classpath 用。
+make_empty_jar() {
+  local out="$1" stage
+  stage="$(mktemp -d "$SANDBOX/jar.XXXXXX")" || fatal "无法创建 jar 暂存目录"
+  mkdir -p "$(dirname "$out")"
+  printf 'placeholder\n' > "$stage/placeholder.txt"
+  rm -f "$out"
+  ( cd "$stage" && zip -q -r -X "$out" placeholder.txt ) || fatal "zip 失败：$out"
+  rm -rf "$stage"
+}
+
+# fixture_build_toolchain：把真实 build.sh 复制进夹具（cp，不是符号链接），
+# 并在沙箱里蒸出两个空依赖 jar。之后的 build_run 默认用它们当 MC_JAR/FORGE_JAR。
+fixture_build_toolchain() {
+  cp "$REAL_BUILD" "$REPO/build.sh" || fatal "复制 build.sh 失败：$REAL_BUILD"
+  chmod +x "$REPO/build.sh" 2>/dev/null || true   # Android 挂载上不生效，调用一律 bash
+  mkdir -p "$SANDBOX/deps"
+  make_empty_jar "$SANDBOX/deps/mc.jar"
+  make_empty_jar "$SANDBOX/deps/forge.jar"
+  BUILD_MC_JAR="$SANDBOX/deps/mc.jar"
+  BUILD_FORGE_JAR="$SANDBOX/deps/forge.jar"
+  BUILD_MOD_VERSION=""
+}
+
+# fixture_build_mod <modId> [声明 modId]：造一个可构建的模组夹具。
+# 源码刻意不 import 任何 Minecraft/Forge 类 —— 空 classpath 也能编译，
+# 测试锁的是「构建入口的产物路径与元数据校验」，不是编译真实模组。
+# 第二个参数用来故意造「目录名 ≠ mods.toml 的 modId」的坏夹具。
+fixture_build_mod() {
+  local id="$1" declared="${2:-$1}"
+  mkdir -p "$REPO/mods/$id/src" "$REPO/mods/$id/resources/META-INF"
+  cat > "$REPO/mods/$id/src/DemoEntry.java" <<'JAVA'
+// 测试夹具：不依赖任何外部类型，空 classpath 即可编译。
+public final class DemoEntry {
+  private DemoEntry() {}
+}
+JAVA
+  {
+    printf 'modLoader="javafml"\n'
+    printf 'loaderVersion="[36,)"\n'
+    printf 'license="MIT"\n'
+    printf '\n'
+    printf '[[mods]]\n'
+    printf 'modId="%s"\n' "$declared"
+    printf 'version="${file.jarVersion}"\n'
+    printf 'displayName="构建夹具"\n'
+  } > "$REPO/mods/$id/resources/META-INF/mods.toml"
+}
+
+# fixture_build_commit [message]：把构建夹具入库。
+# 必须先提交再跑 deliver，否则 deliver 的 assert_git_clean 会被夹具自身绊倒。
+fixture_build_commit() {
+  git -C "$REPO" add -A || fatal "夹具 git add 失败"
+  git -C "$REPO" commit -q -m "${1:-fixture: 构建夹具}" || fatal "夹具构建提交失败"
+}
+
+# build_run [args...]：在夹具里跑真实 build.sh 的副本。
+# MC_JAR/FORGE_JAR/MOD_VERSION 由 BUILD_* 变量注入；要测缺依赖就把对应的
+# BUILD_* 置空（空值同样触发 build.sh 的 :? 报错，与「完全没设」等价）。
+build_run() {
+  LAST_CMDLINE="bash ./build.sh $*"
+  local rc=0
+  ( cd "$REPO" && \
+    MC_JAR="${BUILD_MC_JAR-}" \
+    FORGE_JAR="${BUILD_FORGE_JAR-}" \
+    MOD_VERSION="${BUILD_MOD_VERSION-}" \
+    bash ./build.sh "$@" ) >"$OUT" 2>&1 || rc=$?
+  RC=$rc
+  return 0
+}
+
+# dist_dir_files：dist/ 下实际存在的文件名，按 C 排序（从目录推导，不写死）。
+dist_dir_files() {
+  ( cd "$REPO" && find dist -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | LC_ALL=C sort )
+}
+
 # ---------- 预置「真实仓库」状态 ----------
 
 # fixture_existing_delivery <modId> <版本>：把夹具摆成真实仓库的样子 ——
@@ -263,7 +360,7 @@ fixture_existing_delivery() {
 deliver_run() {
   LAST_CMDLINE="bash ./deliver $*"
   local rc=0
-  ( cd "$REPO" && bash ./deliver "$@" ) >"$OUT" 2>&1 || rc=$?
+  ( cd "$REPO" && env "${DELIVER_ENV[@]}" bash ./deliver "$@" ) >"$OUT" 2>&1 || rc=$?
   RC=$rc
   return 0
 }

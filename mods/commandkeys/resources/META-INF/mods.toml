@@ -7,7 +7,6 @@ modId="commandkeys"
 # build.sh 把版本号写进 jar 清单，Forge 从这里取
 version="${file.jarVersion}"
 displayName="Command Keys"
-artifactName="[自建-工具-指令按键]commandkeys"
 authors="CommandKeys"
 description='''
 Bind keys to commands. Press the key, the server runs the command with permission level 4,
