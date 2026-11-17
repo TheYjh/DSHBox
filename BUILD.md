@@ -1,6 +1,6 @@
 # 构建说明
 
-两个模组都**不用 ForgeGradle / MDK**。做法是直接对「SRG 生产名」的 Minecraft 1.16.5 客户端 jar 编译：Minecraft 官方发布的 client jar 里类名就是 `func_71410_x`、`field_71439_g` 这种 SRG 名，Forge 在运行时把方法名映射回来。所以只要有依赖 jar，`javac` + `jar` 两条命令就能出成品。
+模组都**不用 ForgeGradle / MDK**（`NAMING.md` 登记了几个就能构建几个，目前 5 个）。做法是直接对「SRG 生产名」的 Minecraft 1.16.5 客户端 jar 编译：Minecraft 官方发布的 client jar 里类名就是 `func_71410_x`、`field_71439_g` 这种 SRG 名，Forge 在运行时把方法名映射回来。所以只要有依赖 jar，`javac` + `jar` 两条命令就能出成品。
 
 代价是源码里写的也是 SRG 名（`Minecraft.func_71410_x()` 而不是 `Minecraft.getInstance()`），可读性差一些，但不需要几十兆的 Gradle 环境。
 
@@ -68,7 +68,52 @@ OUT=/path/发布/     bash build-apk.sh /path/重铸百科-1.4.0.apk
 - `META-INF/` 下**同时**有 `*.SF` 与 `*.RSA|*.DSA|*.EC`——只查签名文件在不在，**不验签内容**；
 - 文件名不是 `-unaligned` / `-unsigned` 这类中间产物（zipalign 之前、apksigner 之前的件都不是可交付件）。
 
-原文件名原样保留，不按 `NAMING.md` 改名——APK 不走 `./deliver` 的 modId 归档路径。目标已存在且内容不同时中止且不覆盖，与 `./deliver` 的冲突纪律一致。APK **不进 git**（`.gitignore` 已挡 `成品/应用/*.apk`），脚本也不 `git add`。
+原文件名原样保留，不按 `NAMING.md` 改名——APK 不走 `./deliver` 的 modId 归档路径。目标已存在且内容不同时中止且不覆盖，与 `./deliver` 的冲突纪律一致；区别是 `./deliver` 有 `--overwrite` 这个显式覆盖开关（`build-apk.sh` 没有，要替换就先手动移走旧件，见它的报错提示）。APK **不进 git**（`.gitignore` 已挡 `成品/应用/*.apk`），脚本也不 `git add`。
+
+## 三个入口怎么串起来
+
+只有三个入口，其余都是它们之间的搬运：
+
+```
+mods/<id>/src  ──build.sh──▶  dist/<id>-<ver>.jar  ──deliver──▶  成品/模组/[自制-<域>-<描述>]<id>-<ver>.jar
+                              （验证产物，不入库）                （成品，入库并提交）
+                                                                 └─(可选) DSHBOX_ARTIFACT_DIR/模组/  旁路副本
+
+外部的已签名 apk  ──build-apk.sh──▶  成品/应用/<原文件名>（不入库）
+                                     └─(可选) DSHBOX_ARTIFACT_DIR/应用/  或显式 OUT
+```
+
+**模组这条链**：
+
+```bash
+MC_JAR=... FORGE_JAR=... bash build.sh commandkeys   # 1. 产出 dist/commandkeys-<版本>.jar（中性名）
+./deliver --check                                    # 2. 看会归档成什么名字，零改动
+./deliver                                            # 3. 归档 + 刷新清单 + 提交 + 推送
+DSHBOX_ARTIFACT_DIR=/path/外部 ./deliver             # 3'. 想额外留一份给别人就拿这个
+```
+
+每一步的性质记清楚：
+
+- `dist/` 里的是**验证产物**（中间文件）：中性名、被 `.gitignore` 挡住、不入库也不提交、
+  可随时整目录删掉重建，它是「编译出来了」的凭据，不是交付物。
+- `成品/模组/` 里的是**成品**：带前缀、入库、出现在 `成品/文档/模组清单.md` 里。
+  前缀只在这一步由 `NAMING.md` 施加——所以改前缀改 `NAMING.md`，不要改 `build.sh` 也不要改 `mods.toml`
+  （`mods.toml` 里没有 `artifactName` 这种键，写了也没人读）。
+- `DSHBOX_ARTIFACT_DIR` 挂在最后：**归档之后额外复制**，仓库内 `成品/` 仍是主副本、仍照常提交。
+
+**APK 这条链**独立于模组链：外部工具链签好名 → `build-apk.sh` 收进 `成品/应用/`。
+这里 `DSHBOX_ARTIFACT_DIR` 是**换默认成品根**（不是额外复制），显式 `OUT` 再优先于它。
+两条链的 `DSHBOX_ARTIFACT_DIR` 语义不同，别按同一个理解用。
+
+**没有迁移模式。** 一次性迁移已在提交 `958131a` 完成，仓库里不存在 `--migrate`，也不打算加——
+「把别处的 jar 收进来」就是 `./deliver <路径>`：
+
+```bash
+./deliver /path/to/别处攒的/某个模组-1.0.0.jar   # 显式路径，同样按 NAMING.md 改名归档
+```
+
+同理，`成品apk/`、`模组与其他文件/` 这两类「旧交付目录」在本仓库的全部 git 历史与磁盘上都不曾存在过，
+没有需要迁移或兼容的旧状态；`成品/` 是唯一的交付目录。
 
 ## 当前状态（重要）
 
@@ -138,8 +183,9 @@ bash tests/run.sh '7*'
 | `89-apk-reject-intermediate` | 未签名、`-unaligned`、`-unsigned`、非 `.apk` 四种输入 → 各自退出码 1、输出点名原因、`成品/应用` 连目录都不建、显式 `OUT` 也不产出文件 |
 | `91-apk-filename-preserved` | 原文件名原样保留（中文 + 空格 + 点号 + 连字符逐字符比对），默认与 `OUT=目录` 两路都不改名、不加 `[自制-…]` 前缀 |
 | `90-real-naming-coverage` | 真实仓库的命名登记齐备（跨文件静态检查，不在夹具里）：每个 `mods/<id>` 的 `mods.toml` 声明 `modId` 必须等于目录名，且该 id 在真实 `NAMING.md` 的登记表里有行、功能域在枚举内、具体描述非空 |
+| `92-e2e-three-entries` | 三个入口在**同一个夹具仓库**里串通：`build.sh` 产出中性名 `dist/demo-2.1.0.jar`（dist/ 里没有带前缀的件）→ `deliver --check` 报「新增 1 个」且整树零改动 → `deliver` 归档成带前缀名、与 dist/ 产物逐字节相同、dist/ 原件仍在、一次提交 → 重复跑报「未变」不产生新提交 → 改 `NAMING.md` 描述后新名落位而旧名留在原处（命名权威在 NAMING.md 的行为证据）→ `build-apk.sh` 默认落 `成品/应用/`、`DSHBOX_ARTIFACT_DIR` 换根、`OUT` 优先于它 → APK 既在盘上又没被 `git add`（且确实被 `.gitignore` 挡住），全程结束工作树干净 |
 
-用例就这些。它们覆盖的是 `deliver` 的归档、冲突中止、拒绝、清理、提交推送与清单五条主线，`build.sh` 的产物路径与元数据校验，`build-apk.sh` 的默认落位、`DSHBOX_ARTIFACT_DIR`、`OUT` 覆盖与中间产物拒绝四条主线，以及 `deliver-plugin` 的归档、跳过、`--check`、幂等与镜像删除五条主线，**不是**对外行为的全集——下面这些还没有用例：`--no-push`、`--copy-only`、`-h/--help`、显式传入路径（不走 `dist/*.jar`）的成功路径；`build-apk.sh` 的 `-h/--help`、「目标已存在且内容不同」的中止路径、非 zip 与缺 `AndroidManifest.xml` 两种拒绝；插件侧的 `--no-push`、`-h/--help`、`DSHBOX_PLUGIN_REPO` 的自动克隆路径（本机 443 不通，只能离线夹具）、`tools/plugin-watch.sh`（除 `--once` 外没有用例锁它的循环行为）。要动其中任何一处，先补对应用例。
+用例就这些（40 个；`92` 是唯一的端到端那条，其余各锁一条行为）。它们覆盖的是 `deliver` 的归档、冲突中止、拒绝、清理、提交推送与清单五条主线，`build.sh` 的产物路径与元数据校验，`build-apk.sh` 的默认落位、`DSHBOX_ARTIFACT_DIR`、`OUT` 覆盖与中间产物拒绝四条主线，以及 `deliver-plugin` 的归档、跳过、`--check`、幂等与镜像删除五条主线，**不是**对外行为的全集——下面这些还没有用例：`--no-push`、`--copy-only`、`-h/--help`、显式传入路径（不走 `dist/*.jar`）的成功路径；`build-apk.sh` 的 `-h/--help`、「目标已存在且内容不同」的中止路径、非 zip 与缺 `AndroidManifest.xml` 两种拒绝；插件侧的 `--no-push`、`-h/--help`、`DSHBOX_PLUGIN_REPO` 的自动克隆路径（本机 443 不通，只能离线夹具）、`tools/plugin-watch.sh`（除 `--once` 外没有用例锁它的循环行为）。要动其中任何一处，先补对应用例。
 
 冲突中止这条语义见 #12 的核对结论（#20 评论把它从 7 条收窄成 1 条）：目标文件名已存在但内容不同时，`deliver` 把它当成**冲突**（不是新增），默认整批中止、退出码非零、在任何写操作之前退出；只有显式 `--overwrite` 才覆盖。`--check` 下同样报告冲突，但仍以 0 退出——`--check` 的用途就是「先看看会发生什么」，用非零退出码会让它不可用，而它本来就不写任何东西。
 

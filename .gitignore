@@ -2,6 +2,10 @@
 saves/
 *.tar.xz
 
+# dist/ 是构建的验证产物（中间文件），不是成品：不入库、不提交。
+# 成品只走 ./deliver 归档进 成品/。挡在这里是为了 `git add -A` 不会误收。
+dist/
+
 # 本地凭据，绝不入库
 token.txt
 gh_token.txt
