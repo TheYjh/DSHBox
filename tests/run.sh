@@ -26,6 +26,14 @@ if [ ! -f "$TESTS_DIR/../build.sh" ]; then
   echo "错误：找不到 $TESTS_DIR/../build.sh（构建用例必须针对真实的构建脚本）" >&2
   exit 2
 fi
+if [ ! -f "$TESTS_DIR/../build-apk.sh" ]; then
+  echo "错误：找不到 $TESTS_DIR/../build-apk.sh（APK 交付用例必须针对真实的 APK 入口）" >&2
+  exit 2
+fi
+if [ ! -f "$TESTS_DIR/lib/apk-harness.sh" ]; then
+  echo "错误：缺少 $TESTS_DIR/lib/apk-harness.sh（APK 用例的夹具库）" >&2
+  exit 2
+fi
 if ! command -v zip >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
   echo "错误：需要 zip 与 unzip（假 jar 由测试现场蒸出来）" >&2
   exit 2

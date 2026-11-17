@@ -44,6 +44,32 @@ bash build.sh commandkeys   # 产出 dist/commandkeys-<版本>.jar
 
 依赖变量缺失同样在编译前报错并点名缺哪个（`MC_JAR` / `FORGE_JAR`），不会变成一堆 javac 符号错误。
 
+## APK 交付入口
+
+APK 的构建在**另一个仓库/工具链**里（Android 侧），本仓库只负责把**已经签好名**的 APK 收进统一的成品目录。入口是 `build-apk.sh`：
+
+```bash
+# 落 成品/应用/<原文件名>
+bash build-apk.sh /path/重铸百科-1.4.0.apk
+
+# 换默认成品根：落 $DSHBOX_ARTIFACT_DIR/应用/<原文件名>
+DSHBOX_ARTIFACT_DIR=/path/外部成品 bash build-apk.sh /path/重铸百科-1.4.0.apk
+
+# 显式 OUT 优先于上面两者：是文件路径就直接用，是目录就拼原文件名
+OUT=/path/发布/x.apk bash build-apk.sh /path/重铸百科-1.4.0.apk
+OUT=/path/发布/     bash build-apk.sh /path/重铸百科-1.4.0.apk
+```
+
+它只做**接收 + 校验 + 落位**，**不签名、不打包、不反编译**——本机没有 `apksigner`/`apktool`/`zipalign`/`aapt2`/`gradle`，脚本也不打算假装有。签名必须由产出 APK 的那一侧完成。
+
+收之前它会查三件事，任一不成立就非零退出，并且**不写任何文件**（连 `成品/应用/` 目录都不建）：
+
+- 是合法 zip，且根上有 `AndroidManifest.xml`；
+- `META-INF/` 下**同时**有 `*.SF` 与 `*.RSA|*.DSA|*.EC`——只查签名文件在不在，**不验签内容**；
+- 文件名不是 `-unaligned` / `-unsigned` 这类中间产物（zipalign 之前、apksigner 之前的件都不是可交付件）。
+
+原文件名原样保留，不按 `NAMING.md` 改名——APK 不走 `./deliver` 的 modId 归档路径。目标已存在且内容不同时中止且不覆盖，与 `./deliver` 的冲突纪律一致。APK **不进 git**（`.gitignore` 已挡 `成品/应用/*.apk`），脚本也不 `git add`。
+
 ## 当前状态（重要）
 
 - `mods/*/src` 里的 Java 是**用 CFR 0.152 从现有 jar 反编译**得到的等价源码，不是最初手写的那份：逻辑一致，注释、变量名的原始写法已经丢失。
@@ -53,7 +79,7 @@ bash build.sh commandkeys   # 产出 dist/commandkeys-<版本>.jar
 
 ## 怎么跑测试
 
-`deliver` 与 `deliver-plugin` 回归测试的入口只有一个：
+`deliver`、`build.sh`、`build-apk.sh` 与 `deliver-plugin` 回归测试的入口只有一个：
 
 ```bash
 # 跑全部用例
@@ -107,9 +133,13 @@ bash tests/run.sh '7*'
 | `84-deliver-artifact-dir-override` | `DSHBOX_ARTIFACT_DIR` 只做旁路复制：仓库内 `成品/模组/` 照常落位并入库，外部目录下出现同名同内容副本，该目录不进版本库、工作树仍干净 |
 | `85-build-missing-modstoml` | 模组缺 `mods.toml`（目录名与依赖都正常）→ 退出码 1、信息点名 `mods.toml`，`dist/` 不产生产物 |
 | `86-build-modid-regex` | 目录名带路径分隔符或以点开头（`../etc`、`.hidden`）→ 退出码 1、信息说清不允许，不会把源码目录拼到仓库外（`src` 路径注入防护） |
+| `87-apk-default-and-artifact-dir` | APK 入口默认落 `成品/应用/<原文件名>`（内容与入参逐字节相同、原件不动），设了 `DSHBOX_ARTIFACT_DIR` 则落 `<根>/应用/` 且仓库内不再多出一份 |
+| `88-apk-out-override` | 显式 `OUT` 优先：是文件路径就直接用、是目录就拼原文件名；与 `DSHBOX_ARTIFACT_DIR` 并存时 `OUT` 赢（外部根下一个文件都不出现），三种情况默认 `成品/应用` 都不被顺手写 |
+| `89-apk-reject-intermediate` | 未签名、`-unaligned`、`-unsigned`、非 `.apk` 四种输入 → 各自退出码 1、输出点名原因、`成品/应用` 连目录都不建、显式 `OUT` 也不产出文件 |
+| `91-apk-filename-preserved` | 原文件名原样保留（中文 + 空格 + 点号 + 连字符逐字符比对），默认与 `OUT=目录` 两路都不改名、不加 `[自制-…]` 前缀 |
 | `90-real-naming-coverage` | 真实仓库的命名登记齐备（跨文件静态检查，不在夹具里）：每个 `mods/<id>` 的 `mods.toml` 声明 `modId` 必须等于目录名，且该 id 在真实 `NAMING.md` 的登记表里有行、功能域在枚举内、具体描述非空 |
 
-用例就这些。它们覆盖的是 `deliver` 的归档、冲突中止、拒绝、清理、提交推送与清单五条主线，`build.sh` 的产物路径与元数据校验，以及 `deliver-plugin` 的归档、跳过、`--check`、幂等与镜像删除五条主线，**不是**对外行为的全集——下面这些还没有用例：`--no-push`、`--copy-only`、`-h/--help`、显式传入路径（不走 `dist/*.jar`）的成功路径；插件侧的 `--no-push`、`-h/--help`、`DSHBOX_PLUGIN_REPO` 的自动克隆路径（本机 443 不通，只能离线夹具）、`tools/plugin-watch.sh`（除 `--once` 外没有用例锁它的循环行为）。要动其中任何一处，先补对应用例。
+用例就这些。它们覆盖的是 `deliver` 的归档、冲突中止、拒绝、清理、提交推送与清单五条主线，`build.sh` 的产物路径与元数据校验，`build-apk.sh` 的默认落位、`DSHBOX_ARTIFACT_DIR`、`OUT` 覆盖与中间产物拒绝四条主线，以及 `deliver-plugin` 的归档、跳过、`--check`、幂等与镜像删除五条主线，**不是**对外行为的全集——下面这些还没有用例：`--no-push`、`--copy-only`、`-h/--help`、显式传入路径（不走 `dist/*.jar`）的成功路径；`build-apk.sh` 的 `-h/--help`、「目标已存在且内容不同」的中止路径、非 zip 与缺 `AndroidManifest.xml` 两种拒绝；插件侧的 `--no-push`、`-h/--help`、`DSHBOX_PLUGIN_REPO` 的自动克隆路径（本机 443 不通，只能离线夹具）、`tools/plugin-watch.sh`（除 `--once` 外没有用例锁它的循环行为）。要动其中任何一处，先补对应用例。
 
 冲突中止这条语义见 #12 的核对结论（#20 评论把它从 7 条收窄成 1 条）：目标文件名已存在但内容不同时，`deliver` 把它当成**冲突**（不是新增），默认整批中止、退出码非零、在任何写操作之前退出；只有显式 `--overwrite` 才覆盖。`--check` 下同样报告冲突，但仍以 0 退出——`--check` 的用途就是「先看看会发生什么」，用非零退出码会让它不可用，而它本来就不写任何东西。
 
@@ -120,6 +150,7 @@ bash tests/run.sh '7*'
 - **不依赖预置二进制夹具**。假 jar 由 `make_jar` 用 `zip` 现场蒸：里面只有 `META-INF/MANIFEST.MF`（带 `Implementation-Version`）与 `META-INF/mods.toml`（`modId` 在这里），够 `deliver` 读元数据就行。需要 `zip` 与 `unzip`，`tests/run.sh` 会先检查。
 - **接缝只有命令行**。测试把真实的 `deliver` 与 `build.sh` **复制**进夹具（不是符号链接），然后 `bash ./deliver ...` / `bash ./build.sh ...` 调用它们，断言输出、退出码与文件系统结果。测试从不 source 脚本的内部函数，所以内部怎么改都不该影响测试——除非对外行为变了，那正是要测的。
 - **`90-real-naming-coverage` 是唯一读真实仓库的用例**：它只用 `find`/`awk`/`sed` 读 `mods/` 与 `NAMING.md` 的事实，不写、不提交、不在真实仓库里跑 `deliver`。原因是被它检查的东西（命名表漏登一行）在夹具里永远造不出来——漏登不会立刻报错，只会在你真去交付那个模组时才暴露。
+- **APK 夹具也是现场蒸的**。`tests/lib/apk-harness.sh` 用 `zip` 造最小 APK：含 `AndroidManifest.xml` + `META-INF/FIXTURE.SF` + `META-INF/FIXTURE.RSA` 就算「已签名」，去掉 `META-INF/` 就是「未签名」（`make_signed_apk` / `make_unsigned_apk`）。它不建 git 仓库——APK 入口不碰 git，用例断言的是落位与拒绝，不是提交。真实 `成品/应用/` 不在测试范围内（脚本被复制进沙箱，`BASH_SOURCE` 定位到的仓库根就是沙箱）。
 - **构建夹具不需要真依赖**。`build.sh` 只把 `MC_JAR` / `FORGE_JAR` 拼进 `javac` 的 classpath，而 `javac` 对 classpath 里不存在的条目并不报错，所以夹具用两个只含占位文件的空 jar 就能离线跑通「编译 → 打包」整条链路。夹具模组的源码刻意不 import 任何 Minecraft/Forge 类（`fixture_build_mod`），测的是构建入口的产物路径与元数据校验，不是「真实模组能否编译」——后者需要 1.16.5 客户端与 forge jar，不属于回归测试。
 - **期望文件名由夹具的 `NAMING.md` 推导**，测试里不写死前缀常量。
 - **夹具预建成品目录**。真实仓库里 `成品/模组`、`成品/文档` 常存，夹具照此预建，所以 `--check` 的「零改动」断言的是**零文件改动**——`deliver` 开头的 `mkdir -p` 若真的建出空目录，不算在这个断言里。要连目录一起管，得先把这个前提从夹具里去掉。

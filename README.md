@@ -32,11 +32,12 @@ Minecraft **Forge 1.16.5** 自制模组的构建产物工作区与问题跟踪�
 
 ```
 成品/模组/*.jar        最终模组 jar（用户直接安装，入库）
-成品/应用/*.apk        签名 APK（不入库，仅在盘上）
+成品/应用/*.apk        签名 APK（不入库，仅在盘上；入口 bash build-apk.sh <apk>）
 成品/文档/             安装/指令/更新日志 + 自动生成的模组清单
 mods/<modId>/src       Java 源码（从 jar 反编译恢复，见 BUILD.md）
 mods/<modId>/resources mods.toml、语言文件、图标、pack.mcmeta
 deliver                交付脚本：归档 → 提交 → 推送
+build-apk.sh           APK 交付入口：接收已签名 APK → 校验 → 落 成品/应用/（不签名）
 NAMING.md              jar 文件名的唯一权威来源（功能域闭合枚举）
 GLOSSARY.md            本仓库术语
 docs/adr/              架构决定
@@ -45,6 +46,11 @@ build.sh               构建脚本（javac + jar，不依赖 ForgeGradle）
 BUILD.md               依赖、构建命令与当前状态
 saves/                 存档（455MB，不入库）
 ```
+
+`成品/应用/` 现在有了正式入口：`bash build-apk.sh <apk>` 把**已经签好名**的 APK 收进
+`成品/应用/`（原文件名原样保留），`DSHBOX_ARTIFACT_DIR` 换默认成品根、显式 `OUT` 优先。
+它只做接收 + 校验 + 落位，**不签名、不打包**；未签名与 `-unaligned`/`-unsigned` 中间产物会被拒绝。
+细节见 `BUILD.md` 的「APK 交付入口」。
 
 **构建产物不再放仓库根**：根目录和 `dist/` 里不应有 jar。交付用 `./deliver`，细节见 `AGENTS.md`。
 
