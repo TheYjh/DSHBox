@@ -126,8 +126,12 @@ HEAD
 
 # fixture_source <modId>：造 mods/<modId>/src/（=「有源码」）。deliver 用
 # 「源码目录是否存在」判断可不可重建，所以这个目录决定 prune 行为。
+# 里面放一个占位文件：git 不跟踪空目录，没有文件的话夹具提交会直接失败
+# （"nothing to commit"），「有源码」这个状态也就进不了任何一次提交。
 fixture_source() {
-  mkdir -p "$REPO/mods/$1/src"
+  local dir="$REPO/mods/$1/src"
+  mkdir -p "$dir"
+  [ -f "$dir/Placeholder.java" ] || printf '// 测试夹具占位\n' > "$dir/Placeholder.java"
 }
 
 # naming_set_desc <modId> <新描述>：改夹具命名表的「具体描述」列。

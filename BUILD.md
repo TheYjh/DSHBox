@@ -57,7 +57,7 @@ bash tests/run.sh 20-check
 bash tests/run.sh '*check*'
 ```
 
-全部通过时末尾打印 `通过 7，失败 0` 并以 0 退出；任一用例失败则整体非零退出，并打印 `失败用例：...`。想看单个用例的详细输出就直接跑它，比如 `bash tests/cases/21-same-no-commit.sh`。
+全部通过时末尾打印 `通过 N，失败 0` 并以 0 退出；任一用例失败则整体非零退出，并打印 `失败用例：...`。想看单个用例的详细输出就直接跑它，比如 `bash tests/cases/21-same-no-commit.sh`。
 
 ### 用例
 
@@ -70,8 +70,12 @@ bash tests/run.sh '*check*'
 | `30-reject-unregistered` | modId 读得出来但 `NAMING.md` 没登记 → 退出码 1，报「未在 NAMING.md 登记」，`成品/` 整棵树零改动、模组清单不重写、不产生提交 |
 | `31-reject-no-modid` | jar 缺 `modId` → 退出码 1，`成品/` 整棵树零改动、不产生提交；不许拿文件名顶替 modId |
 | `32-reject-no-version` | MANIFEST 无 `Implementation-Version` 且文件名也解析不出版本 → 退出码 1，`成品/` 整棵树零改动、不产生提交 |
+| `40-prune-report-only` | 有源码的旧版被新版取代 → 只进「可清理」报告；不加 `--prune` 时文件仍在、提交里无删除、`--check` 也不动一个字节 |
+| `41-prune-deletes-with-history` | 同上场景加 `--prune` → 旧 jar 消失、删除进提交，且删除前那个 commit 上 `git cat-file -e` / `git show` 仍能取回原内容 |
+| `42-prune-no-source-never-candidate` | 旧 jar 没有 `mods/<id>/src` → 即使被更高版本取代也不进候选（单独一条断言），加 `--prune` 后文件仍在、内容不变 |
+| `43-prune-baseline-is-inputs` | 比较基准是本次入参不是全目录：本次没给入参的 modId 零候选；没有新产物时零候选，加 `--prune` 也不删 |
 
-后面还有 `40-prune`（`--prune` 的删除授权）、`50-push`（推送失败路径）、`60-manifest`（模组清单）待补。
+后面还有 `50-push`（推送失败路径）、`60-manifest`（模组清单）待补。
 
 ### 测试的边界
 
