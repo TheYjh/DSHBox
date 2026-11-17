@@ -38,7 +38,7 @@ fi
 
 # 未登记的 modId / 未登记的功能域都不该出现在这里：成品目录里只应有这一个 jar。
 CHECKED=$((CHECKED + 1))
-mapfile -t ARCHIVED < <(cd "$REPO" && find 成品/模组 -maxdepth 1 -name '*.jar' -printf '%f\n' | LC_ALL=C sort)
+mapfile -t ARCHIVED < <(mod_dir_jars)
 if [ "${#ARCHIVED[@]}" -ne 1 ] || [ "${ARCHIVED[0]}" != "$EXPECTED" ]; then
   fail "成品/模组 内容不符，期望只有 $EXPECTED，实际：${ARCHIVED[*]:-（空）}"
 fi

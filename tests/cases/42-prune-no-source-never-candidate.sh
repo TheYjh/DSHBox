@@ -44,9 +44,6 @@ assert_file "$REPO/成品/模组/$LEGACY_NEW_NAME"
 
 # 候选段落必须为空。用 awk 把「可清理的旧产物」到「不可再生资产」之间的正文切出来，
 # 只在这个切片里查 —— 因为同一个文件名会（且应该）出现在后面的不可再生资产段落里。
-candidate_section() {
-  awk '/^可清理的旧产物/ {f=1; next} /^不可再生资产/ {f=0} f' "$OUT"
-}
 CHECKED=$((CHECKED + 1))
 CAND="$(candidate_section)"
 case "$CAND" in

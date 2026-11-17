@@ -16,18 +16,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/harness.sh"
 harness_init
 fixture_repo
 
-mkdir -p "$REPO/成品/模组" "$REPO/成品/文档"
-make_jar "成品/模组/[自制-GOD-既有交付]demo-0.1.0.jar" demo 0.1.0 "既有交付" MIT
-printf '# 模组清单\n\n> 哨兵：拒绝路径不得重写本文件。\n' > "$REPO/成品/文档/模组清单.md"
-git -C "$REPO" add -A || fatal "夹具 git add 失败"
-git -C "$REPO" commit -q -m "fixture: 预置成品目录与清单" || fatal "夹具预置提交失败"
+fixture_existing_delivery demo 0.1.0
 
 # 文件名里带 demo-1.0.0（deliver 的版本回退路径能读出来），但 mods.toml 缺 modId。
 # 这样失败只可能来自「读不到 modId」。
 NO_MODID=1 make_jar dist/demo-1.0.0.jar demo 1.0.0 "缺 modId" MIT
 
 cp "$REPO/成品/文档/模组清单.md" "$SANDBOX/manifest.before" || fatal "无法备份夹具清单"
-BEFORE_FILES="$(cd "$REPO" && find 成品/模组 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+BEFORE_FILES="$(mod_dir_files)"
 tree_snapshot
 BEFORE_COMMITS="$(git_count_commits)"
 
@@ -46,7 +42,7 @@ assert_tree_unchanged
 assert_content_same "$SANDBOX/manifest.before" "$REPO/成品/文档/模组清单.md"
 
 CHECKED=$((CHECKED + 1))
-AFTER_FILES="$(cd "$REPO" && find 成品/模组 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+AFTER_FILES="$(mod_dir_files)"
 if [ "$AFTER_FILES" != "$BEFORE_FILES" ]; then
   fail "成品/模组 文件列表变了：期望 [$BEFORE_FILES]，实际 [$AFTER_FILES]"
 fi

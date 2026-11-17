@@ -63,7 +63,9 @@ assert_git_clean
 
 # 旧文件是无源码资产：deliver 不会自动删，只能留在原处（规则见 AGENTS.md / ADR 0001）。
 assert_file "$REPO/$OLD_DEST"
-assert_contains "不可再生资产"
+# 断具体那一行（[无源码] <旧目标名>），而不是只断段落标题——标题是无条件打印的，
+# 只断标题等于断了一条恒真式。
+assert_contains "[无源码] $OLD_NAME"
 
 # 顺带确认：这条路径没有走成「覆盖同名文件」，两个名字现在是并存的。
 CHECKED=$((CHECKED + 1))

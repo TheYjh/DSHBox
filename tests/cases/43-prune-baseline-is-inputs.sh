@@ -39,9 +39,6 @@ git -C "$REPO" add -A || fatal "夹具 git add 失败"
 git -C "$REPO" commit -q -m "fixture: 预置其他 modId 的两代产物" || fatal "夹具预置提交失败"
 
 # 从「可清理的旧产物」到「不可再生资产」之间的正文切片。
-candidate_section() {
-  awk '/^可清理的旧产物/ {f=1; next} /^不可再生资产/ {f=0} f' "$OUT"
-}
 
 # ---------- 场景一：本次只交付 demo 的更高版本 ----------
 

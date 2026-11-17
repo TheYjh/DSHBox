@@ -19,17 +19,13 @@ fixture_repo
 # 真实仓库里 成品/模组、成品/文档 已存在，模组清单.md 是已入库的派生物。
 # 夹具对齐这个状态：目录预建 + 一份带哨兵内容的清单 + 一份既有 jar，
 # 这样断言的是「文件列表完全一致」，而不只是「目录恰好是空的」。
-mkdir -p "$REPO/成品/模组" "$REPO/成品/文档"
-make_jar "成品/模组/[自制-GOD-既有交付]demo-0.1.0.jar" demo 0.1.0 "既有交付" MIT
-printf '# 模组清单\n\n> 哨兵：拒绝路径不得重写本文件。\n' > "$REPO/成品/文档/模组清单.md"
-git -C "$REPO" add -A || fatal "夹具 git add 失败"
-git -C "$REPO" commit -q -m "fixture: 预置成品目录与清单" || fatal "夹具预置提交失败"
+fixture_existing_delivery demo 0.1.0
 
 # ghost 没有登记；它的元数据本身是完好的，失败必须来自「未登记」而不是「读不到元数据」。
 make_jar dist/ghost-1.0.0.jar ghost 1.0.0 "未登记模组" MIT
 
 cp "$REPO/成品/文档/模组清单.md" "$SANDBOX/manifest.before" || fatal "无法备份夹具清单"
-BEFORE_FILES="$(cd "$REPO" && find 成品/模组 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+BEFORE_FILES="$(mod_dir_files)"
 tree_snapshot
 BEFORE_COMMITS="$(git_count_commits)"
 
@@ -54,7 +50,7 @@ assert_content_same "$SANDBOX/manifest.before" "$REPO/成品/文档/模组清单
 
 # 成品/模组 下的文件列表与跑之前完全一致（逐名比对，失败时看得出多了什么）。
 CHECKED=$((CHECKED + 1))
-AFTER_FILES="$(cd "$REPO" && find 成品/模组 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+AFTER_FILES="$(mod_dir_files)"
 if [ "$AFTER_FILES" != "$BEFORE_FILES" ]; then
   fail "成品/模组 文件列表变了：期望 [$BEFORE_FILES]，实际 [$AFTER_FILES]"
 fi

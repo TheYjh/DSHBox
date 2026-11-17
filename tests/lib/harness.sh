@@ -37,13 +37,6 @@ fail() {
 }
 
 CHECKED=0
-# check <描述> <命令...>：跑失败即记一条 fail，成功则静默。
-check() {
-  local desc="$1"; shift
-  CHECKED=$((CHECKED + 1))
-  if ! "$@"; then fail "$desc"; return 1; fi
-  return 0
-}
 
 dump_context() {
   {
@@ -189,18 +182,9 @@ fixture_commit_offline() {
 # remote_break：把夹具的 origin 指到一个**不存在的本地路径**，让 push 必然失败。
 # 保留 remote 本身（不删 origin —— 删了 deliver 会走「没有上游」的另一条分支），
 # 路径落在沙箱里，全程离线，不碰任何 URL 或域名。
-# 之后用 remote_heal 恢复。
-REMOTE_URL_SAVED=""
 remote_break() {
-  REMOTE_URL_SAVED="$(git -C "$REPO" remote get-url origin)" || fatal "读 origin URL 失败"
   git -C "$REPO" remote set-url origin "$SANDBOX/nonexistent/never-a-repo.git" \
     || fatal "把 origin 指向不存在的路径失败"
-}
-
-# remote_heal：把 remote_break 改掉的 origin URL 恢复回夹具裸仓库。
-remote_heal() {
-  [ -n "$REMOTE_URL_SAVED" ] || fatal "remote_heal 之前必须先 remote_break"
-  git -C "$REPO" remote set-url origin "$REMOTE_URL_SAVED" || fatal "恢复 origin URL 失败"
 }
 
 # git_remote_ref <ref>：直接读夹具裸仓库上的 ref（不联网、不用 fetch）。
@@ -257,6 +241,21 @@ make_jar() {
   rm -rf "$stage"
 }
 
+# ---------- 预置「真实仓库」状态 ----------
+
+# fixture_existing_delivery <modId> <版本>：把夹具摆成真实仓库的样子 ——
+# 成品/模组 与 成品/文档 已存在、里面有一份更早的交付、清单是入库的派生物。
+# 拒绝路径用例靠它把断言写成「文件列表逐名一致」，而不只是「目录恰好是空的」。
+fixture_existing_delivery() {
+  local id="$1" ver="$2" name
+  mkdir -p "$REPO/成品/模组" "$REPO/成品/文档"
+  name="$(naming_expected "$id" "$ver")" || fatal "夹具命名表里查不到 $id"
+  make_jar "成品/模组/$name" "$id" "$ver" "示例交付" MIT
+  printf '# 模组清单\n\n> 哨兵：拒绝路径不得重写本文件。\n' > "$REPO/成品/文档/模组清单.md"
+  git -C "$REPO" add -A || fatal "夹具 git add 失败"
+  git -C "$REPO" commit -q -m "fixture: 预置成品目录与清单" || fatal "夹具预置提交失败"
+}
+
 # ---------- 跑 deliver ----------
 
 # deliver_run [args...]：在夹具仓库里跑真实 deliver 的副本。
@@ -290,10 +289,11 @@ assert_no_file() {
   fail "期望文件不存在：$1"
 }
 
-assert_dir() {
-  CHECKED=$((CHECKED + 1))
-  [ -d "$1" ] && return 0
-  fail "期望目录存在：$1"
+# candidate_section：把 deliver 输出里「可清理的旧产物」到「不可再生资产」之间的
+# 正文切出来，供清理相关断言用。必须切片——同一个文件名可能（且应该）出现在
+# 后面的不可再生资产段落里，直接在整份输出里查会把正确实现判红。
+candidate_section() {
+  awk '/^可清理的旧产物/ {f=1; next} /^不可再生资产/ {f=0} f' "$OUT"
 }
 
 # 默认的 haystack 是上一次 deliver_run 的输出**正文**（$OUT 是文件路径，
@@ -476,14 +476,6 @@ manifest_rows() {
   }' "$(manifest_path)" | LC_ALL=C sort
 }
 
-# manifest_modids：抽出「modId」列，与 manifest_rows 同一批行、同一顺序。
-manifest_modids() {
-  awk -F'|' '/^\| *`/ {
-    gsub(/`/, "", $3); gsub(/^[ \t]+|[ \t]+$/, "", $3)
-    print $3
-  }' "$(manifest_path)"
-}
-
 # manifest_source_of <文件名>：该行「源码」列的原文（有 / 无源码）。
 # 找不到这一行时返回非零，避免「查不到」被当成空串蒙混过去。
 manifest_source_of() {
@@ -498,7 +490,13 @@ manifest_source_of() {
     END { if (!found) exit 1 }' "$(manifest_path)"
 }
 
-# mod_dir_jars：成品/模组 下实际存在的 jar 文件名，按 C 排序（从目录推导，不写死）。
+# mod_dir_files：成品/模组 下实际存在的文件名，按 C 排序（从目录推导，不写死）。
+# 拒绝路径要断言「文件列表逐名不变」，用这个；只要 jar 时用 mod_dir_jars。
+mod_dir_files() {
+  ( cd "$REPO" && find "成品/模组" -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort )
+}
+
+# mod_dir_jars：成品/模组 下实际存在的 jar 文件名，按 C 排序。
 mod_dir_jars() {
   ( cd "$REPO" && find "成品/模组" -maxdepth 1 -type f -name '*.jar' -printf '%f\n' | LC_ALL=C sort )
 }

@@ -18,18 +18,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/harness.sh"
 harness_init
 fixture_repo
 
-mkdir -p "$REPO/成品/模组" "$REPO/成品/文档"
-make_jar "成品/模组/[自制-GOD-既有交付]demo-0.1.0.jar" demo 0.1.0 "既有交付" MIT
-printf '# 模组清单\n\n> 哨兵：拒绝路径不得重写本文件。\n' > "$REPO/成品/文档/模组清单.md"
-git -C "$REPO" add -A || fatal "夹具 git add 失败"
-git -C "$REPO" commit -q -m "fixture: 预置成品目录与清单" || fatal "夹具预置提交失败"
+fixture_existing_delivery demo 0.1.0
 
 # 文件名 demo.jar 不含 -<ver>，MANIFEST 也没有 Implementation-Version：
 # 元数据与文件名两条来源都读不出版本。
 NO_VERSION=1 make_jar dist/demo.jar demo 0 "缺版本号" MIT
 
 cp "$REPO/成品/文档/模组清单.md" "$SANDBOX/manifest.before" || fatal "无法备份夹具清单"
-BEFORE_FILES="$(cd "$REPO" && find 成品/模组 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+BEFORE_FILES="$(mod_dir_files)"
 tree_snapshot
 BEFORE_COMMITS="$(git_count_commits)"
 
@@ -48,7 +44,7 @@ assert_tree_unchanged
 assert_content_same "$SANDBOX/manifest.before" "$REPO/成品/文档/模组清单.md"
 
 CHECKED=$((CHECKED + 1))
-AFTER_FILES="$(cd "$REPO" && find 成品/模组 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+AFTER_FILES="$(mod_dir_files)"
 if [ "$AFTER_FILES" != "$BEFORE_FILES" ]; then
   fail "成品/模组 文件列表变了：期望 [$BEFORE_FILES]，实际 [$AFTER_FILES]"
 fi
@@ -56,7 +52,7 @@ fi
 # 文件名里读不出版本，任何「编出来的版本」落位都会让成品/模组 多出一个文件；
 # 上面逐名比对已经覆盖。这里再钉一次：不该出现 demo 的任何新版本名。
 CHECKED=$((CHECKED + 1))
-UNEXPECTED="$(cd "$REPO" && find 成品/模组 -maxdepth 1 -type f -name '*demo-1*.jar' -printf '%f\n' | LC_ALL=C sort)"
+UNEXPECTED="$(mod_dir_files | grep '^.*demo-1.*\.jar$' || true)"
 if [ -n "$UNEXPECTED" ]; then
   fail "缺版本号时不该落位任何 demo-1* 产物，实际：$UNEXPECTED"
 fi
