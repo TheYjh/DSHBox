@@ -456,3 +456,58 @@ naming_expected() {
   desc="${reg#*|}"
   printf '[自制-%s-%s]%s-%s.jar' "$domain" "$desc" "$id" "$ver"
 }
+
+# ---------- 模组清单（#19，纯新增） ----------
+#
+# 清单是 `deliver` 从 jar 元数据生成的派生物，表头固定为：
+#   | 文件 | modId | 版本 | 名称 | 许可证 | 源码 |
+# 下面几个函数只做「从清单里抽取事实」，断言的期望值一律来自目录与 jar 的
+# 实际状态，用例里不写死清单内容。
+
+# manifest_path：派生清单的路径。
+manifest_path() { printf '%s' "$REPO/成品/文档/模组清单.md"; }
+
+# manifest_rows：抽出「文件」列（去掉反引号），按 C 排序。
+# 只认数据行（以 `| \`` 开头），表头与分隔行自动跳过。
+manifest_rows() {
+  awk -F'|' '/^\| *`/ {
+    gsub(/`/, "", $2); gsub(/^[ \t]+|[ \t]+$/, "", $2)
+    if ($2 != "") print $2
+  }' "$(manifest_path)" | LC_ALL=C sort
+}
+
+# manifest_modids：抽出「modId」列，与 manifest_rows 同一批行、同一顺序。
+manifest_modids() {
+  awk -F'|' '/^\| *`/ {
+    gsub(/`/, "", $3); gsub(/^[ \t]+|[ \t]+$/, "", $3)
+    print $3
+  }' "$(manifest_path)"
+}
+
+# manifest_source_of <文件名>：该行「源码」列的原文（有 / 无源码）。
+# 找不到这一行时返回非零，避免「查不到」被当成空串蒙混过去。
+manifest_source_of() {
+  awk -F'|' -v f="$1" '
+    /^\| *`/ {
+      name = $2; gsub(/`/, "", name); gsub(/^[ \t]+|[ \t]+$/, "", name)
+      if (name == f) {
+        col = $7; gsub(/`/, "", col); gsub(/^[ \t]+|[ \t]+$/, "", col)
+        print col; found = 1; exit
+      }
+    }
+    END { if (!found) exit 1 }' "$(manifest_path)"
+}
+
+# mod_dir_jars：成品/模组 下实际存在的 jar 文件名，按 C 排序（从目录推导，不写死）。
+mod_dir_jars() {
+  ( cd "$REPO" && find "成品/模组" -maxdepth 1 -type f -name '*.jar' -printf '%f\n' | LC_ALL=C sort )
+}
+
+# manifest_file_modid_pairs：每行输出「文件名<US>modId」，供需要行内两列配对的断言用。
+manifest_file_modid_pairs() {
+  awk -F'|' '/^\| *`/ {
+    name = $2; gsub(/`/, "", name); gsub(/^[ \t]+|[ \t]+$/, "", name)
+    id = $3; gsub(/`/, "", id); gsub(/^[ \t]+|[ \t]+$/, "", id)
+    if (name != "") printf "%s|%s\n", name, id
+  }' "$(manifest_path)"
+}

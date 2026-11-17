@@ -78,8 +78,11 @@ bash tests/run.sh '*check*'
 | `50-push-nochange-ahead` | 无变化但本地有未推送提交（夹具里 `commit --allow-empty` 造的离线提交）→ 仍要推：打印「本地有 1 个未推送的提交」且裸仓库 `main` 更新到本地 HEAD，本地不再产生新提交 |
 | `50-push-fail-keeps-commit` | 推送失败（origin 指向不存在的本地路径，不删 origin）：退出码非零、打印「推送失败（已重试 2 次）」与「未回滚」，那个归档提交仍在 `git log` 里，裸仓库 `main` 停在失败前的位置 |
 | `50-push-fail-no-rollback` | 同一失败场景下的工作树单独断言：新归档文件仍在盘上且内容与原 jar 逐字节相同、在 HEAD 的树里、`git status` 干净，事后 `--check` 也不再改动一个字节 |
+| `60-manifest-refresh` | 清单随交付刷新：交付前预置一份哨兵清单，交付 `demo-1.2.3.jar` 后哨兵被整份重写、表头在位、当次归档的 modId 与目标文件名都能在清单里找到，版本列等于 jar 元数据里的 `Implementation-Version`，且清单与新 jar 在**同一个提交**里 |
+| `60-manifest-coverage` | 清单与 `成品/模组/` 双向一一对应：本次入参只有一个新 jar，目录里另有两个非入参的历史产物——清单每一行都要在目录里找得到文件、目录里每个 `.jar` 都要在清单里有行，两个方向的排序 diff 必须为空（钉死「清单遍历目录生成」，防止退化成只列本次入参） |
+| `60-manifest-no-source` | 源码列按实际状态标注：目录里同时有无 `mods/<id>/src` 的 legacy 与有源码的 demo，交付后前者那行是 `无源码`、后者是 `有`，并逐行比对清单源码列与 `mods/<modId>/src` 的存在性，二者不得漂移 |
 
-后面还有 `60-manifest`（模组清单）待补。
+用例就这些，`deliver` 目前对外的每条行为都有对应用例锁住，没有待补的。
 
 ### 测试的边界
 
