@@ -2,23 +2,12 @@
 saves/
 *.tar.xz
 
-# dist/ 是构建的验证产物（中间文件），不是成品：不入库、不提交。
-# 成品只走 ./deliver 归档进 成品/。挡在这里是为了 `git add -A` 不会误收。
-dist/
-
 # 本地凭据，绝不入库
 token.txt
 gh_token.txt
 .env
 # deck 插件的本地缓存，不入库
 .dsh-mattskillsdeck-cache/
-
-# 成品/ 是发布目录，正文入库；但 APK 体积大且由 Q17c 决定不入库
-成品/应用/*.apk
-
-# 网页版 UI 修复分发包 ~94MB，与 APK 同理不入库；用
-# 成品/应用/重铸百科网页版-UI修复/apply_ui_fix.py 可从原始资源一键重生成
-成品/应用/重铸百科网页版-*.zip
 
 # 插件工作区/ 是其他工作区的产物接收区，也不该入库；同步源在盘上，目标在 GitHub 插件仓库
 插件工作区/

@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# tests/run.sh — 唯一的测试入口。
+# tests/run.sh — 插件同步回归测试的唯一入口。
 #
 #   bash tests/run.sh              # 跑全部用例
-#   bash tests/run.sh 20-check     # 只跑匹配的用例（glob 作用于 cases/<文件> 与去掉扩展名后的名字）
+#   bash tests/run.sh 70-archive   # 只跑匹配的用例（glob 作用于 cases/<文件> 与去掉扩展名后的名字）
 #
 # 每个 case 是独立进程（独立 bash + 自己的临时夹具仓库），互不影响。
 # 任一 case 失败 → 整体非零退出。全程离线：夹具的 origin 是本地裸仓库，
-# 真实 `成品/`、真实 git 配置、真实远端都不会被触碰。
+# 真实 git 配置与真实远端都不会被触碰。
+#
+# 模组构建与交付（build.sh / deliver / build-apk.sh）的回归测试已随内容迁移到
+# TheYjh/dsh-mods；本仓库只保留插件同步（deliver-plugin、tools/plugin-watch.sh）的用例。
 
 set -uo pipefail
 
@@ -18,24 +21,12 @@ if [ ! -f "$HARNESS" ]; then
   echo "错误：缺少 $HARNESS" >&2
   exit 2
 fi
-if [ ! -f "$TESTS_DIR/../deliver" ]; then
-  echo "错误：找不到 $TESTS_DIR/../deliver（测试必须针对真实的交付脚本）" >&2
+if [ ! -f "$TESTS_DIR/../deliver-plugin" ]; then
+  echo "错误：找不到 $TESTS_DIR/../deliver-plugin（测试必须针对真实的插件同步脚本）" >&2
   exit 2
 fi
-if [ ! -f "$TESTS_DIR/../build.sh" ]; then
-  echo "错误：找不到 $TESTS_DIR/../build.sh（构建用例必须针对真实的构建脚本）" >&2
-  exit 2
-fi
-if [ ! -f "$TESTS_DIR/../build-apk.sh" ]; then
-  echo "错误：找不到 $TESTS_DIR/../build-apk.sh（APK 交付用例必须针对真实的 APK 入口）" >&2
-  exit 2
-fi
-if [ ! -f "$TESTS_DIR/lib/apk-harness.sh" ]; then
-  echo "错误：缺少 $TESTS_DIR/lib/apk-harness.sh（APK 用例的夹具库）" >&2
-  exit 2
-fi
-if ! command -v zip >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
-  echo "错误：需要 zip 与 unzip（假 jar 由测试现场蒸出来）" >&2
+if [ ! -f "$TESTS_DIR/lib/plugin-harness.sh" ]; then
+  echo "错误：缺少 $TESTS_DIR/lib/plugin-harness.sh（插件用例的夹具库）" >&2
   exit 2
 fi
 
@@ -69,7 +60,7 @@ if [ ${#SELECTED[@]} -eq 0 ]; then
   exit 2
 fi
 
-echo "== DSHBox 交付脚本测试 =="
+echo "== DSHBox 插件同步测试 =="
 echo "测试目录：$TESTS_DIR"
 echo "用例数：${#SELECTED[@]}"
 echo
